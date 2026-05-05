@@ -1,0 +1,23 @@
+{
+  "name": "NULL.Control — Учёт рабочего времени",
+  "short_name": "NULL.Control",
+  "description": "Система учёта рабочего времени",
+  "start_url": "/app/scan",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
