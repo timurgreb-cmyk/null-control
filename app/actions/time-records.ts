@@ -3,9 +3,12 @@
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
-export async function processQRScan(locationId: string) {
+export async function processQRScan(locationId: string, clientTimeIso?: string) {
   try {
     const supabase = createClient();
+    
+    // Используем переданное время или серверное как запасной вариант
+    const now = clientTimeIso ? new Date(clientTimeIso) : new Date();
     
     // Проверка авторизации
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -13,71 +16,50 @@ export async function processQRScan(locationId: string) {
       return { success: false, error: "Необходима авторизация" };
     }
 
-    // Проверка, что locationId это UUID
+    // Проверка формата UUID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(locationId)) {
       return { success: false, error: "Неверный формат QR-кода" };
     }
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return { success: false, error: "Ошибка конфигурации сервера: отсутствует ключ доступа" };
-    }
-
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // 1. Проверка существования и активности локации
+    // 1. Проверка локации
     const { data: location, error: locError } = await supabaseAdmin
       .from("locations")
       .select("id, name, is_active")
       .eq("id", locationId)
       .single();
 
-    if (locError) {
-      console.error("Location error:", locError);
-      return { success: false, error: `Локация не найдена или ошибка БД: ${locError.message}` };
-    }
-    
-    if (!location) {
-      return { success: false, error: "Локация не существует" };
+    if (locError || !location) {
+      return { success: false, error: "Локация не найдена" };
     }
     
     if (!location.is_active) {
-      return { success: false, error: "Данная локация неактивна" };
+      return { success: false, error: "Локация неактивна" };
     }
 
-    // 2. Получение последней отметки сотрудника сегодня
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // 2. Получение последней отметки сотрудника за последние 24 часа 
+    // (вместо жесткого "сегодня", чтобы избежать проблем с границей суток)
+    const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     const { data: lastRecords, error: recordsError } = await supabaseAdmin
       .from("time_records")
       .select("id, record_type, recorded_at")
       .eq("employee_id", user.id)
-      .gte("recorded_at", today.toISOString())
+      .gte("recorded_at", dayAgo.toISOString())
       .order("recorded_at", { ascending: false })
       .limit(1);
-
-    if (recordsError) {
-       console.error("Error fetching last record:", recordsError);
-       return { success: false, error: `Ошибка при получении истории (${recordsError.code}): ${recordsError.message}` };
-    }
 
     const lastRecord = lastRecords && lastRecords.length > 0 ? lastRecords[0] : null;
 
     // 3. Проверка кулдауна (2 минуты)
     if (lastRecord) {
       const lastTime = new Date(lastRecord.recorded_at).getTime();
-      const currentTime = new Date().getTime();
-      const diffMinutes = (currentTime - lastTime) / (1000 * 60);
+      const diffMinutes = (now.getTime() - lastTime) / (1000 * 60);
 
       if (diffMinutes < 2) {
         return { 
@@ -87,40 +69,36 @@ export async function processQRScan(locationId: string) {
       }
     }
 
-    // 4. Определение типа новой отметки
+    // 4. Определение типа (если последняя была приход - делаем уход, иначе приход)
     let newRecordType = "check_in";
     if (lastRecord && lastRecord.record_type === "check_in") {
       newRecordType = "check_out";
     }
 
-    // 5. Запись в базу
+    // 5. Запись в базу с использованием клиентского времени
     const { error: insertError } = await supabaseAdmin
       .from("time_records")
       .insert({
         employee_id: user.id,
         location_id: location.id,
-        record_type: newRecordType
+        record_type: newRecordType,
+        recorded_at: now.toISOString()
       });
 
     if (insertError) {
-      console.error("Insert error:", insertError);
-      return { success: false, error: `Ошибка при сохранении (${insertError.code}): ${insertError.message}` };
+      return { success: false, error: `Ошибка записи: ${insertError.message}` };
     }
 
     const { revalidatePath } = await import("next/cache");
     revalidatePath("/", "layout");
-
-    const friendlyMessage = newRecordType === "check_in" 
-      ? "Хорошей смены!" 
-      : "Хорошей дороги домой!";
 
     return { 
       success: true, 
       data: {
         type: newRecordType,
         locationName: location.name,
-        time: new Date().toISOString(),
-        message: friendlyMessage
+        time: now.toISOString(),
+        message: newRecordType === "check_in" ? "Хорошей смены!" : "Хорошей дороги домой!"
       }
     };
 

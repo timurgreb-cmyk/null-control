@@ -26,7 +26,8 @@ export default function ScanPage() {
     if (data && data.text && status === "scanning") {
       setStatus("processing");
       
-      const result = await processQRScan(data.text);
+      const clientTime = new Date().toISOString();
+      const result = await processQRScan(data.text, clientTime);
       
       if (result.success && result.data) {
         setStatus("success");

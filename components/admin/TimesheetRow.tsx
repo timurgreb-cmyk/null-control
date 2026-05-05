@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import LocalTime from "@/components/LocalTime";
 
 export default function TimesheetRow({ row }: { row: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -59,8 +60,8 @@ export default function TimesheetRow({ row }: { row: any }) {
                     </span>
                   </div>
                   <div className="flex justify-between text-sm mb-1">
-                    <div className="text-gray-500">Приход: <span suppressHydrationWarning className="text-gray-900 font-medium">{detail.formattedFirstIn}</span></div>
-                    <div className="text-gray-500">Уход: <span suppressHydrationWarning className="text-gray-900 font-medium">{detail.formattedLastOut}</span></div>
+                    <div className="text-gray-500">Приход: <span className="text-gray-900 font-medium">{detail.firstIn ? <LocalTime isoString={detail.firstIn} formatStr="HH:mm" /> : "—"}</span></div>
+                    <div className="text-gray-500">Уход: <span className="text-gray-900 font-medium">{detail.lastOut ? <LocalTime isoString={detail.lastOut} formatStr="HH:mm" /> : "—"}</span></div>
                   </div>
                   {detail.status === 'complete' && (
                     <div className="flex justify-between text-xs mt-2 pt-2 border-t border-gray-100">

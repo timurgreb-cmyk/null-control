@@ -3,6 +3,7 @@ import { format, parseISO } from "date-fns";
 import { ru } from "date-fns/locale";
 import DeleteRecordButton from "./DeleteRecordButton";
 import AddRecordModal from "./AddRecordModal";
+import LocalTime from "@/components/LocalTime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -77,7 +78,7 @@ export default async function AttendancePage() {
             {recordsWithErrors?.map((record: any) => (
               <tr key={record.id} className={`hover:bg-gray-50 ${record.isError ? "bg-red-50/50" : ""}`}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <span suppressHydrationWarning>{format(parseISO(record.recorded_at), "dd MMM yyyy, HH:mm", { locale: ru })}</span>
+                  <LocalTime isoString={record.recorded_at} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">{record.profiles?.full_name || "Неизвестно"}</div>
