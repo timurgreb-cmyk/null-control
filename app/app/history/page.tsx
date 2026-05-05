@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { LogIn, LogOut, MapPin } from "lucide-react";
+import LocalTime from "@/components/LocalTime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -88,7 +89,7 @@ export default async function HistoryPage() {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-gray-900 text-lg">
-                        {format(new Date(record.recorded_at), "HH:mm")}
+                        <LocalTime isoString={record.recorded_at} formatStr="HH:mm" />
                       </p>
                     </div>
                   </div>
