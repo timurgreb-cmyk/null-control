@@ -63,7 +63,7 @@ export default async function AttendancePage() {
     if (!groupedByEmployee[empId]) {
       groupedByEmployee[empId] = {
         employeeId: empId,
-        employeeName: record.profiles?.full_name || "Неизвестно",
+        employeeName: (record.profiles as any)?.full_name || "Неизвестно",
         records: []
       };
     }
@@ -103,7 +103,7 @@ export default async function AttendancePage() {
                         </div>
                      </div>
                      <div className="flex justify-between items-end mt-1">
-                       <div className="text-xs text-gray-500 font-medium">📍 {record.locations?.name || "Неизвестно"}</div>
+                       <div className="text-xs text-gray-500 font-medium">📍 {(record.locations as any)?.name || "Неизвестно"}</div>
                        <DeleteRecordButton recordId={record.id} />
                      </div>
                      {record.isError && <div className="text-xs text-red-500 font-bold mt-3 bg-red-50 p-2 rounded-lg text-center border border-red-100">⚠️ Нет отметки об уходе</div>}
