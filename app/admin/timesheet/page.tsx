@@ -56,6 +56,8 @@ export default async function TimesheetPage({
     let missingCheckouts = 0;
     let totalOvertimeHours = 0;
 
+    let totalWorkedHours = 0;
+
     // Группируем по дням
     const days: Record<string, typeof empRecords> = {};
     empRecords.forEach(r => {
@@ -87,6 +89,8 @@ export default async function TimesheetPage({
         const actualMins = differenceInMinutes(parseISO(lastOut), parseISO(firstIn));
         const actualHours = actualMins / 60;
         
+        totalWorkedHours += actualHours;
+
         // Получаем базу из локации прихода
         const locId = firstInRec?.location_id;
         const baseHours = locId && locationMap[locId] ? locationMap[locId] : 8;
@@ -117,9 +121,6 @@ export default async function TimesheetPage({
     });
 
     // Расчет ЗП с переработками
-    // Ставка за час = ставка смены / 8 (по умолчанию) или базовая ставка локации?
-    // Т.к. ставка у нас одна на сотрудника, будем делить на среднюю базу (8) или можно делить на базовые часы каждой локации.
-    // Проще всего разделить общую ставку на 8 для почасовой.
     const hourlyRate = (emp.shift_rate || 0) / 8;
     const basePay = completedShifts * (emp.shift_rate || 0);
     const overtimePay = totalOvertimeHours * hourlyRate;
@@ -128,6 +129,7 @@ export default async function TimesheetPage({
     return {
       ...emp,
       completedShifts,
+      totalWorkedHours,
       overtimeHours: totalOvertimeHours,
       totalEarned: parseInt(totalEarned),
       missingCheckouts,
@@ -155,6 +157,7 @@ export default async function TimesheetPage({
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ФИО</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Отработано дней</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Часы</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ставка за смену</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Переработки (ч)</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Незакрытые смены</th>

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import LocalTime from "@/components/LocalTime";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -109,14 +110,14 @@ export default async function AdminDashboard() {
             <div className="mt-auto pt-3 border-t border-gray-50 flex justify-between text-sm">
               <div className="flex flex-col">
                 <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Приход</span>
-                <span suppressHydrationWarning className={`font-medium ${emp.firstIn ? "text-gray-900" : "text-gray-300"}`}>
-                  {emp.firstIn ? format(new Date(emp.firstIn), "HH:mm") : "—:—"}
+                <span className={`font-medium ${emp.firstIn ? "text-gray-900" : "text-gray-300"}`}>
+                  {emp.firstIn ? <LocalTime isoString={emp.firstIn} formatStr="HH:mm" /> : "—:—"}
                 </span>
               </div>
               <div className="flex flex-col text-right">
                 <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Уход</span>
-                <span suppressHydrationWarning className={`font-medium ${emp.lastOut ? "text-gray-900" : "text-gray-300"}`}>
-                  {emp.lastOut ? format(new Date(emp.lastOut), "HH:mm") : "—:—"}
+                <span className={`font-medium ${emp.lastOut ? "text-gray-900" : "text-gray-300"}`}>
+                  {emp.lastOut ? <LocalTime isoString={emp.lastOut} formatStr="HH:mm" /> : "—:—"}
                 </span>
               </div>
             </div>

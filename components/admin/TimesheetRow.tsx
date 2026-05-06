@@ -23,6 +23,9 @@ export default function TimesheetRow({ row }: { row: any }) {
         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
           {row.completedShifts} дн.
         </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
+          {row.totalWorkedHours ? row.totalWorkedHours.toFixed(1) : "0.0"} ч
+        </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
           {row.shift_rate ? `${row.shift_rate} ₸` : "Не задана"}
         </td>
@@ -45,7 +48,7 @@ export default function TimesheetRow({ row }: { row: any }) {
       
       {isExpanded && (
         <tr className="bg-gray-50/50">
-          <td colSpan={6} className="px-6 py-4">
+          <td colSpan={7} className="px-6 py-4">
             <div className="text-xs font-semibold text-gray-500 uppercase mb-3 px-2">Детализация по дням:</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {row.dailyDetails.map((detail: any) => (

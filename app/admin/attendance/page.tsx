@@ -55,6 +55,23 @@ export default async function AttendancePage() {
     return { ...record, isError };
   }) || [];
 
+  // Группировка по сотрудникам
+  const groupedByEmployee: Record<string, { employeeName: string, employeeId: string, records: any[] }> = {};
+  
+  recordsWithErrors.forEach(record => {
+    const empId = record.employee_id;
+    if (!groupedByEmployee[empId]) {
+      groupedByEmployee[empId] = {
+        employeeId: empId,
+        employeeName: record.profiles?.full_name || "Неизвестно",
+        records: []
+      };
+    }
+    groupedByEmployee[empId].records.push(record);
+  });
+
+  const groupedArray = Object.values(groupedByEmployee).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
@@ -62,84 +79,45 @@ export default async function AttendancePage() {
         <AddRecordModal employees={employees || []} />
       </div>
 
-      {/* Desktop View */}
-      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата и Время</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Сотрудник</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Событие</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Локация</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Действия</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {recordsWithErrors?.map((record: any) => (
-              <tr key={record.id} className={`hover:bg-gray-50 ${record.isError ? "bg-red-50/50" : ""}`}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <LocalTime isoString={record.recorded_at} />
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">{record.profiles?.full_name || "Неизвестно"}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                    record.record_type === "check_in" 
-                      ? "bg-green-100 text-green-800" 
-                      : "bg-blue-100 text-blue-800"
-                  }`}>
-                    {record.record_type === "check_in" ? "Приход" : "Уход"}
-                  </span>
-                  {record.isError && <span className="ml-2 text-xs text-red-600 font-medium">Нет "Ухода"</span>}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {record.locations?.name || "Неизвестно"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <DeleteRecordButton recordId={record.id} />
-                </td>
-              </tr>
-            ))}
-            {recordsWithErrors.length === 0 && (
-              <tr suppressHydrationWarning>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                  Отметок пока нет
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Mobile View */}
-      <div className="md:hidden space-y-3">
-        {recordsWithErrors?.map((record: any) => (
-          <div key={record.id} className={`bg-white rounded-xl p-4 shadow-sm border ${record.isError ? "border-red-200 bg-red-50/30" : "border-gray-200"}`}>
-            <div className="flex justify-between items-start mb-2">
-              <div className="font-bold text-gray-900">{record.profiles?.full_name || "Неизвестно"}</div>
-              <span className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-full ${
-                record.record_type === "check_in" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-              }`}>
-                {record.record_type === "check_in" ? "Приход" : "Уход"}
-              </span>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {groupedArray.map(group => (
+          <div key={group.employeeId} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col max-h-[600px]">
+            <div className="bg-gray-50 px-5 py-4 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
+               <h3 className="font-bold text-gray-900 truncate pr-2">{group.employeeName}</h3>
+               <span className="bg-primary/10 text-primary text-xs px-3 py-1 rounded-full font-bold whitespace-nowrap">
+                 {group.records.length} {group.records.length === 1 ? 'отметка' : 'отметок'}
+               </span>
             </div>
-            <div className="flex justify-between text-sm text-gray-500 items-end">
-              <div>
-                <div suppressHydrationWarning className="text-gray-900 font-medium">
-                  {format(parseISO(record.recorded_at), "dd MMM, HH:mm", { locale: ru })}
-                </div>
-                <div className="text-xs mt-0.5">📍 {record.locations?.name || "Неизвестно"}</div>
-                {record.isError && <div className="text-xs text-red-500 font-medium mt-1">⚠️ Нет "Ухода"</div>}
-              </div>
-              <DeleteRecordButton recordId={record.id} />
+            <div className="p-0 flex-1 overflow-y-auto custom-scrollbar">
+              <ul className="divide-y divide-gray-100">
+                {group.records.map(record => (
+                  <li key={record.id} className={`p-5 flex flex-col hover:bg-gray-50 transition-colors ${record.isError ? "bg-red-50/30" : ""}`}>
+                     <div className="flex justify-between items-start mb-2.5">
+                       <span className={`px-2.5 py-1 text-[10px] uppercase font-black tracking-wider rounded-full ${
+                          record.record_type === "check_in" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                        }`}>
+                          {record.record_type === "check_in" ? "Приход" : "Уход"}
+                        </span>
+                        <div className="text-gray-900 font-bold">
+                          <LocalTime isoString={record.recorded_at} formatStr="dd MMM, HH:mm" />
+                        </div>
+                     </div>
+                     <div className="flex justify-between items-end mt-1">
+                       <div className="text-xs text-gray-500 font-medium">📍 {record.locations?.name || "Неизвестно"}</div>
+                       <DeleteRecordButton recordId={record.id} />
+                     </div>
+                     {record.isError && <div className="text-xs text-red-500 font-bold mt-3 bg-red-50 p-2 rounded-lg text-center border border-red-100">⚠️ Нет отметки об уходе</div>}
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         ))}
-        {recordsWithErrors.length === 0 && (
-          <div className="bg-white p-8 rounded-xl text-center text-gray-500 border border-gray-200">
-            Отметок пока нет
-          </div>
+        {groupedArray.length === 0 && (
+           <div className="col-span-full bg-white p-12 rounded-2xl text-center text-gray-500 border border-gray-200">
+             <p className="text-lg font-medium text-gray-900 mb-1">Отметок пока нет</p>
+             <p className="text-sm">Сотрудники еще не сканировали QR-код</p>
+           </div>
         )}
       </div>
     </div>
