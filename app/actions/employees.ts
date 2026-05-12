@@ -23,7 +23,7 @@ export async function createEmployee(formData: FormData) {
   const position = formData.get("position") as string;
   const phone = formData.get("phone") as string;
   const shiftRate = parseFloat(formData.get("shiftRate") as string) || 0;
-  const isOvertimeEnabled = formData.get("isOvertimeEnabled") !== "false";
+  const isOvertimeEnabled = formData.get("isOvertimeEnabled") === "true";
 
   // Генерируем системный email и пароль для PIN-кода
   const systemEmail = `pin_${pinCode}@employee.null.control`;
@@ -98,7 +98,7 @@ export async function updateEmployee(formData: FormData) {
   const position = formData.get("position") as string;
   const phone = formData.get("phone") as string;
     const shiftRate = parseFloat(formData.get("shiftRate") as string) || 0;
-  const isOvertimeEnabled = formData.get("isOvertimeEnabled") !== "false";
+  const isOvertimeEnabled = formData.get("isOvertimeEnabled") === "true";
   const isActive = formData.get("isActive") === "true";
 
   try {
