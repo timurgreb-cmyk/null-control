@@ -200,6 +200,8 @@ export default function EmployeeRow({ employee }: { employee: any }) {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
       )}
     </>
   );
