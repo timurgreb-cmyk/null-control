@@ -66,6 +66,20 @@ export default function AddEmployeeForm({ onSuccess }: { onSuccess: () => void }
           </div>
         </div>
         
+        <div className="flex items-center space-x-2 pt-2">
+          <input 
+            type="checkbox" 
+            id="isOvertimeEnabled" 
+            name="isOvertimeEnabled" 
+            defaultChecked 
+            value="true"
+            className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary" 
+          />
+          <label htmlFor="isOvertimeEnabled" className="text-sm font-medium text-gray-700">
+            Начислять переработки (сверх базовых часов локации)
+          </label>
+        </div>
+        
         <div className="flex justify-end pt-4">
           <button 
             type="submit" 

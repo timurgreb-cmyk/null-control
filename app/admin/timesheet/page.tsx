@@ -27,7 +27,7 @@ export default async function TimesheetPage({
   // 1. Получаем сотрудников
   const { data: employees } = await supabase
     .from("profiles")
-    .select("id, full_name, shift_rate")
+    .select("id, full_name, shift_rate, is_overtime_enabled")
     .eq("role", "employee")
     .order("full_name");
 
@@ -95,7 +95,10 @@ export default async function TimesheetPage({
         const locId = firstInRec?.location_id;
         const baseHours = locId && locationMap[locId] ? locationMap[locId] : 8;
         
-        const overtime = Math.max(0, actualHours - baseHours);
+        let overtime = 0;
+        if (emp.is_overtime_enabled !== false) {
+          overtime = Math.max(0, actualHours - baseHours);
+        }
         totalOvertimeHours += overtime;
 
         dailyDetails.push({ 

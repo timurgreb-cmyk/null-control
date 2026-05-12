@@ -23,6 +23,7 @@ export async function createEmployee(formData: FormData) {
   const position = formData.get("position") as string;
   const phone = formData.get("phone") as string;
   const shiftRate = parseFloat(formData.get("shiftRate") as string) || 0;
+  const isOvertimeEnabled = formData.get("isOvertimeEnabled") !== "false";
 
   // Генерируем системный email и пароль для PIN-кода
   const systemEmail = `pin_${pinCode}@employee.null.control`;
@@ -62,7 +63,8 @@ export async function createEmployee(formData: FormData) {
         shift_rate: shiftRate,
         role: "employee",
         is_active: true,
-        pin_code: pinCode
+        pin_code: pinCode,
+        is_overtime_enabled: isOvertimeEnabled
       });
 
     if (profileError) {
@@ -95,7 +97,8 @@ export async function updateEmployee(formData: FormData) {
   const fullName = formData.get("fullName") as string;
   const position = formData.get("position") as string;
   const phone = formData.get("phone") as string;
-  const shiftRate = parseFloat(formData.get("shiftRate") as string) || 0;
+    const shiftRate = parseFloat(formData.get("shiftRate") as string) || 0;
+  const isOvertimeEnabled = formData.get("isOvertimeEnabled") !== "false";
   const isActive = formData.get("isActive") === "true";
 
   try {
@@ -144,7 +147,8 @@ export async function updateEmployee(formData: FormData) {
         phone: phone,
         shift_rate: shiftRate,
         is_active: isActive,
-        pin_code: pinCode
+        pin_code: pinCode,
+        is_overtime_enabled: isOvertimeEnabled
       })
       .eq("id", id);
 
