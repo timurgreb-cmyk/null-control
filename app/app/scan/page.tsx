@@ -17,10 +17,8 @@ export default function ScanPage() {
   const [resultData, setResultData] = useState<{type: string, location: string} | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
 
-  useEffect(() => {
-    // Автоматический запуск при монтировании
-    setCameraActive(true);
-  }, []);
+  // Камера будет запускаться только по кнопке, 
+  // чтобы iOS Safari не запрашивал разрешение при каждом открытии приложения
 
   const handleScan = async (data: any) => {
     if (data && data.text && status === "scanning") {
@@ -86,20 +84,19 @@ export default function ScanPage() {
 
         {/* Кнопка ручного запуска если камера не активна */}
         {!cameraActive && status === "scanning" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-            <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mb-4">
-              <Loader2 className="w-10 h-10 text-white/50" />
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 bg-gray-900">
+            <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center mb-6">
+              <div className="w-12 h-12 border-4 border-primary rounded-xl flex items-center justify-center relative">
+                <div className="w-6 h-1 bg-primary absolute top-1/2 -translate-y-1/2" />
+              </div>
             </div>
-            <h3 className="text-white font-bold mb-2">Камера не запустилась</h3>
-            <p className="text-gray-400 text-sm mb-6">Нажмите кнопку ниже, чтобы запросить доступ к камере вручную</p>
+            <h3 className="text-white text-xl font-bold mb-2">Готовы отметиться?</h3>
+            <p className="text-gray-400 text-sm mb-10 max-w-[250px]">Нажмите кнопку ниже, чтобы включить сканер QR-кодов</p>
             <button 
-              onClick={() => {
-                setCameraActive(false);
-                setTimeout(() => setCameraActive(true), 100);
-              }}
-              className="bg-primary text-white px-8 py-3 rounded-2xl font-bold active:scale-95 transition-all"
+              onClick={() => setCameraActive(true)}
+              className="bg-primary text-white w-full max-w-[280px] py-4 rounded-2xl font-bold text-lg shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 transition-all"
             >
-              Запустить камеру
+              Включить сканер
             </button>
           </div>
         )}
