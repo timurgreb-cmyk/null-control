@@ -69,10 +69,39 @@ export async function processQRScan(locationId: string, clientTimeIso?: string) 
       }
     }
 
+    // Получаем профиль для проверок
+    const { data: employeeProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("full_name, can_upload_production")
+      .eq("id", user.id)
+      .single();
+
     // 4. Определение типа (если последняя была приход - делаем уход, иначе приход)
     let newRecordType = "check_in";
     if (lastRecord && lastRecord.record_type === "check_in") {
       newRecordType = "check_out";
+
+      // Проверка выработки перед уходом
+      const isTester = employeeProfile?.full_name?.toLowerCase().includes("тимур") || 
+                       employeeProfile?.full_name?.toLowerCase().includes("рукием") || 
+                       employeeProfile?.can_upload_production;
+
+      if (isTester) {
+        // Ищем записи о выработке, созданные ПОСЛЕ времени начала смены (check_in)
+        const { data: prodLogs } = await supabaseAdmin
+          .from("production_logs")
+          .select("id")
+          .eq("employee_id", user.id)
+          .gte("created_at", lastRecord.recorded_at)
+          .limit(1);
+
+        if (!prodLogs || prodLogs.length === 0) {
+          return { 
+            success: false, 
+            error: "Сначала загрузите выработку за эту смену во вкладке «Выработка»!" 
+          };
+        }
+      }
     }
 
     // 5. Запись в базу с использованием клиентского времени
@@ -154,13 +183,20 @@ export async function createManualRecord(formData: FormData) {
     const recordType = formData.get("recordType") as string;
     const datetime = formData.get("datetime") as string;
 
+    // input type="datetime-local" отправляет время без часового пояса (например "2024-05-18T10:00").
+    // Так как Vercel работает в UTC, он подумает, что это UTC. Принудительно добавляем зону Алматы (+05:00).
+    let almatyDatetime = datetime;
+    if (almatyDatetime && almatyDatetime.length === 16) {
+      almatyDatetime += ":00+05:00";
+    }
+
     // Ищем дефолтную локацию или любую первую
     const { data: location } = await supabaseAdmin.from("locations").select("id").limit(1).single();
 
     const { error } = await supabaseAdmin.from("time_records").insert({
       employee_id: employeeId,
       record_type: recordType,
-      recorded_at: new Date(datetime).toISOString(),
+      recorded_at: new Date(almatyDatetime).toISOString(),
       location_id: location?.id || null, // Если нет локаций
       notes: "Добавлено вручную"
     });

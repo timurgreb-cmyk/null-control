@@ -4,7 +4,7 @@ import { ScanLine, UserCircle, Briefcase } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { getCurrentProfile } from "@/app/actions/auth";
 
 export default function EmployeeLayout({
   children,
@@ -15,15 +15,11 @@ export default function EmployeeLayout({
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
-    const getProfile = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        setProfile(data);
-      }
+    const fetchProfile = async () => {
+      const data = await getCurrentProfile();
+      setProfile(data);
     };
-    getProfile();
+    fetchProfile();
   }, []);
 
   // Доступ только для Тимура и Рукием, либо если стоит галочка (если ты её добавлял)

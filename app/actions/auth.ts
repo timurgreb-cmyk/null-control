@@ -106,3 +106,23 @@ export async function loginWithPin(pin: string) {
   revalidatePath("/", "layout");
   redirect("/"); 
 }
+
+export async function getCurrentProfile() {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { createClient: createAdminClient } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+  return profile;
+}
