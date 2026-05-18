@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Camera, Loader2, CheckCircle2, AlertCircle, Clock } from "lucide-react";
-import { uploadProductionLog, getTodayProductionLogs } from "@/app/actions/production";
+import { Camera, Loader2, CheckCircle2, AlertCircle, Clock, Pencil, Trash2, X, Check } from "lucide-react";
+import { uploadProductionLog, getTodayProductionLogs, updateProductionLog, deleteProductionLog } from "@/app/actions/production";
 
 export default function ProductionPage() {
   const [loading, setLoading] = useState(false);
@@ -10,6 +10,9 @@ export default function ProductionPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editQty, setEditQty] = useState(0);
 
   const loadHistory = async () => {
     const res = await getTodayProductionLogs();
@@ -32,11 +35,9 @@ export default function ProductionPage() {
     setResult([]);
 
     try {
-      // Сжимаем изображение через Canvas, чтобы не словить 413 Payload Too Large (лимит 1MB)
       const img = new Image();
       img.onload = async () => {
         const canvas = document.createElement("canvas");
-        // Ограничиваем максимальную ширину/высоту до 1024px
         const MAX_DIMENSION = 1024;
         let width = img.width;
         let height = img.height;
@@ -51,17 +52,9 @@ export default function ProductionPage() {
 
         canvas.width = width;
         canvas.height = height;
-
         const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          setError("Ошибка создания холста для сжатия");
-          setLoading(false);
-          return;
-        }
-
+        if (!ctx) { setError("Ошибка сжатия"); setLoading(false); return; }
         ctx.drawImage(img, 0, 0, width, height);
-
-        // Получаем Base64 с качеством 70%
         const compressedBase64 = canvas.toDataURL("image/jpeg", 0.7);
 
         try {
@@ -69,7 +62,7 @@ export default function ProductionPage() {
           if (res.success) {
             setSuccess(true);
             setResult(res.data || []);
-            loadHistory(); // Обновляем историю после успешной загрузки
+            loadHistory();
           } else {
             setError(res.error || "Ошибка распознавания");
           }
@@ -79,20 +72,40 @@ export default function ProductionPage() {
         setLoading(false);
       };
 
-      img.onerror = () => {
-        setError("Ошибка загрузки изображения");
-        setLoading(false);
-      };
-
+      img.onerror = () => { setError("Ошибка загрузки изображения"); setLoading(false); };
       const reader = new FileReader();
-      reader.onload = (e) => {
-        img.src = e.target?.result as string;
-      };
+      reader.onload = (e) => { img.src = e.target?.result as string; };
       reader.readAsDataURL(file);
-
     } catch (err: any) {
       setError(err.message || "Неизвестная ошибка");
       setLoading(false);
+    }
+  };
+
+  const handleEdit = (item: any) => {
+    setEditingId(item.id);
+    setEditName(item.product_name);
+    setEditQty(item.quantity);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+    const res = await updateProductionLog(editingId, editName, editQty);
+    if (res.success) {
+      setEditingId(null);
+      loadHistory();
+    } else {
+      setError(res.error || "Ошибка обновления");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Удалить эту запись?")) return;
+    const res = await deleteProductionLog(id);
+    if (res.success) {
+      loadHistory();
+    } else {
+      setError(res.error || "Ошибка удаления");
     }
   };
 
@@ -149,7 +162,7 @@ export default function ProductionPage() {
         <div className="bg-white border border-gray-100 rounded-3xl p-10 flex flex-col items-center justify-center shadow-sm mb-8">
           <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
           <span className="font-bold text-gray-900">Анализ изображения...</span>
-          <span className="text-gray-500 text-sm mt-2 text-center">Искусственный интеллект читает ваш почерк</span>
+          <span className="text-gray-500 text-sm mt-2 text-center">ИИ распознаёт почерк по справочнику продукции</span>
         </div>
       )}
 
@@ -158,6 +171,11 @@ export default function ProductionPage() {
         <div className="bg-gray-50 px-5 py-4 border-b border-gray-100 flex items-center">
           <Clock className="w-5 h-5 text-gray-400 mr-2" />
           <h2 className="font-bold text-gray-900">Загружено сегодня</h2>
+          {history.length > 0 && (
+            <span className="ml-auto bg-primary/10 text-primary text-xs px-2.5 py-1 rounded-full font-bold">
+              {history.length}
+            </span>
+          )}
         </div>
         
         {history.length === 0 ? (
@@ -168,15 +186,69 @@ export default function ProductionPage() {
           <div className="divide-y divide-gray-50">
             {history.map((item) => {
               const time = new Date(item.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+              const isEditing = editingId === item.id;
+
               return (
-                <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                  <div>
-                    <p className="font-medium text-gray-900">{item.product_name}</p>
-                    <p className="text-xs text-gray-400">{time}</p>
-                  </div>
-                  <div className="bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-lg text-sm">
-                    {item.quantity} шт.
-                  </div>
+                <div key={item.id} className="p-4">
+                  {isEditing ? (
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                        placeholder="Название продукции"
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={editQty}
+                          onChange={(e) => setEditQty(parseInt(e.target.value) || 0)}
+                          className="w-24 p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                          placeholder="Кол-во"
+                        />
+                        <span className="text-gray-400 text-sm">шт.</span>
+                        <div className="ml-auto flex gap-2">
+                          <button
+                            onClick={handleSaveEdit}
+                            className="p-2 bg-green-100 text-green-700 rounded-lg active:scale-95 transition-transform"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="p-2 bg-gray-100 text-gray-500 rounded-lg active:scale-95 transition-transform"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{item.product_name}</p>
+                        <p className="text-xs text-gray-400">{time}</p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-3">
+                        <div className="bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">
+                          {item.quantity} шт.
+                        </div>
+                        <button
+                          onClick={() => handleEdit(item)}
+                          className="p-2 text-gray-400 hover:text-primary active:scale-95 transition-all"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="p-2 text-gray-400 hover:text-red-500 active:scale-95 transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

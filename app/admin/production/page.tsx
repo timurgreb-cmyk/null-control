@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { format, parseISO } from "date-fns";
 import { ru } from "date-fns/locale";
+import LocalTime from "@/components/LocalTime";
+import DeleteProductionButton from "./DeleteProductionButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,78 +22,85 @@ export default async function ProductionAdminPage() {
       quantity,
       record_date,
       created_at,
+      employee_id,
       profiles (
         id,
         full_name
       )
     `)
-    .order("record_date", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (error) {
     console.error("Ошибка загрузки выработки:", error);
   }
 
-  // Группировка по дням и по сотрудникам
-  const groupedData: Record<string, any[]> = {};
+  // Группировка по сотрудникам (как в журнале отметок)
+  const groupedByEmployee: Record<string, { employeeName: string, employeeId: string, records: any[] }> = {};
+  
   logs?.forEach((log) => {
-    if (!groupedData[log.record_date]) {
-      groupedData[log.record_date] = [];
+    const empId = log.employee_id;
+    if (!groupedByEmployee[empId]) {
+      groupedByEmployee[empId] = {
+        employeeId: empId,
+        employeeName: (log.profiles as any)?.full_name || "Неизвестный",
+        records: []
+      };
     }
-    groupedData[log.record_date].push(log);
+    groupedByEmployee[empId].records.push(log);
   });
 
+  const groupedArray = Object.values(groupedByEmployee).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8">
+    <div className="max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Выработка продукции (ИИ)</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Выработка продукции</h1>
       </div>
 
-      <div className="space-y-8">
-        {Object.keys(groupedData).length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-            <h3 className="text-lg font-medium text-gray-900">Нет данных</h3>
-            <p className="text-gray-500 mt-2">Ни один сотрудник еще не загрузил выработку.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {groupedArray.map(group => (
+          <div key={group.employeeId} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col max-h-[600px]">
+            <div className="bg-gray-50 px-5 py-4 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
+               <h3 className="font-bold text-gray-900 truncate pr-2">{group.employeeName}</h3>
+               <span className="bg-primary/10 text-primary text-xs px-3 py-1 rounded-full font-bold whitespace-nowrap">
+                 {group.records.length} {group.records.length === 1 ? 'запись' : 'записей'}
+               </span>
+            </div>
+            <div className="p-0 flex-1 overflow-y-auto custom-scrollbar">
+              <ul className="divide-y divide-gray-100">
+                {group.records.map(record => (
+                  <li key={record.id} className="p-5 flex flex-col hover:bg-gray-50 transition-colors">
+                     <div className="flex justify-between items-start mb-2.5">
+                       <span className="px-2.5 py-1 text-[10px] uppercase font-black tracking-wider rounded-full bg-indigo-100 text-indigo-700">
+                         {record.product_name}
+                       </span>
+                       <div className="text-gray-900 font-bold">
+                         {record.quantity} шт.
+                       </div>
+                     </div>
+                     <div className="flex justify-between items-end mt-1">
+                       <div className="text-xs text-gray-500 font-medium">
+                         📅 {format(parseISO(record.record_date), "d MMM yyyy", { locale: ru })}
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <div className="text-xs text-gray-400">
+                           <LocalTime isoString={record.created_at} formatStr="HH:mm" />
+                         </div>
+                         <DeleteProductionButton logId={record.id} />
+                       </div>
+                     </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-        ) : (
-          Object.keys(groupedData).sort((a, b) => new Date(b).getTime() - new Date(a).getTime()).map(date => {
-            const dayLogs = groupedData[date];
-            const formattedDate = format(parseISO(date), "d MMMM yyyy (EEEE)", { locale: ru });
-            
-            return (
-              <div key={date} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                  <h2 className="text-lg font-bold text-gray-900 capitalize">{formattedDate}</h2>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {dayLogs.map(log => (
-                    <div key={log.id} className="p-6 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-gray-50 transition-colors">
-                      <div className="flex items-start mb-2 sm:mb-0">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                          <span className="text-primary font-bold text-sm">
-                            {log.profiles?.full_name?.charAt(0) || "?"}
-                          </span>
-                        </div>
-                        <div className="ml-4">
-                          <p className="font-bold text-gray-900">{log.profiles?.full_name || "Неизвестный сотрудник"}</p>
-                          <p className="text-sm text-gray-500 flex items-center mt-0.5">
-                            Загружено: {format(new Date(log.created_at), "HH:mm")}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 sm:w-1/3 mt-2 sm:mt-0 flex justify-between items-center">
-                        <span className="font-medium text-gray-700">{log.product_name}</span>
-                        <span className="font-bold text-primary bg-primary/10 px-2 py-1 rounded text-sm">
-                          {log.quantity} шт.
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })
+        ))}
+        {groupedArray.length === 0 && (
+           <div className="col-span-full bg-white p-12 rounded-2xl text-center text-gray-500 border border-gray-200">
+             <p className="text-lg font-medium text-gray-900 mb-1">Данных пока нет</p>
+             <p className="text-sm">Ни один сотрудник еще не загрузил выработку</p>
+           </div>
         )}
       </div>
     </div>

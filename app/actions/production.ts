@@ -3,6 +3,43 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// Каталог продукции для точного распознавания рукописного текста
+const PRODUCT_CATALOG = `
+КАТЕГОРИИ И ПОЗИЦИИ:
+
+МЕЛКОШТУЧКА: Самса, Учпучмак, Пирожок с картофелем, Пирожок с капустой, Пирожное Картошка, Пирожок с брынзой и шпинатом, Пирожок с картошкой и грибами, Пирожок с луком и яйцом, Беляши, Сосиска в тесте, Баурсаки.
+
+МИНИ-ПИРОГИ: Мини семга/рис, Мини курица брынза шпинат, Мини фарш/тыква, Мини пирог капуста-яйцо.
+
+ПИРОГИ МЯСНЫЕ (размеры 24/30/35, половина, четверть): Курица Картофель, Курица Грибы, Фарш Тыква, Фарш Картофель, Семга Рис, Брынза Шпинат, Мясо Картофель, Курица Брынза Шпинат, Капуста Яйцо, Утка Картофель, Картофель Грибы, Губадия.
+
+СЛАДКИЕ ПИРОГИ (размеры 24/30/35, половина, четверть): Трехслойный, Сметанник с персиками, Сметанник с вишней, Сметанник с малиной, Лимонник, Смородиновый, Ассорти (смородина лимон), Курага, Курага Орех, Творог Яблоко, Творожно Маковый, Тропический, Клубничный.
+
+ДЕСЕРТЫ: Вупи Пай, Десерт в стаканчике Красный бархат, Десерт в стаканчике Шоколадный, Кольцо заварное, Муравейник, Муссовый Котик, Маффин ванильный, Леденец на палочке, Рулет Меренга (целый/половина), Чизкейк в имбирном печенье, Чизкейк в шоколадном печенье, Эклер с заварным кремом 100г, Шу 60г, Пломбир на палочке, Рулет с шоколадом, Рулет с орехом, Рулет с малиной.
+
+ТОРТЫ: Брауни весовой, Медовик весовой, Молочная девочка, Морковный, Наполеон весовой, Сметанник с черносливом, Красный бархат, Шоколадный с черносливом, Шоколадный крем чиз.
+
+ХЛЕБ: Хлеб Бородинский, Гриссини упк, Хлеб домашний, Сухари упк, Кефирный хлеб, Хлеб белый, Хлеб День и Ночь, Шелпеки.
+
+БОРЕК: Борек с Курицей, Борек с Брынзой, Борек с Семгой.
+
+БЛИНЫ: Блины творог, Блины фарш, Блины кг.
+
+ЧАК-ЧАК: Чак-чак (230г/350г/400г/500г/750г/1кг/60г), Чак-чак классический кг, Чак-чак колобки 50г, Чак-чак с курагой кг, Чак-чак с изюмом (кг/0.5кг), Чак-чак ханский с орехами кг, Чак-чак Саукеле, Чак-чак Юрта на заказ, Чак-чак колобки 16шт в подарочной коробке.
+
+БУЛОЧКИ: Булочка с творогом, Булочка с курагой, Булочка с маком, Булочка с повидлом, Булочка со сгущенкой, Булочка Синнабон, Слойка с яблоком, Вафельная трубочка.
+
+ТВОРОЖНОЕ: Запеканка творожная (целая/четверть), Сочник с творогом 100г, Сырники 2шт.
+
+ПЕЧЕНЬЕ: Медовое, Шоколадное, Овсяное классическое, Овсяное с шоколадом, Овсяное с изюмом, Овсяное с грецким орехом, Лимонное, Песочное, Кольцо арахисовое, Печенье Юля, Имбирное (обычное/среднее), Имбирные пряники (Яйца/Курочка/Ушки/ХВ/Цыпленок).
+
+БАДРИ: Бадри курага, Бадри чернослив.
+
+СЭТЫ: Уютный вечер, Семейный ужин, Встреча друзей, Популярный, Семейный сладкий, Встречаем гостей сладкий.
+
+ЗАМОРОЗКА: Пирожки с картошкой 6шт, Пирожки лук яйцо 6шт, Пирожки с брынзой и шпинатом 6шт, Пирожки с картошкой и грибами 6шт, Самса 6шт, Учпучмаки 6шт, Сырники 12шт.
+`;
+
 export async function uploadProductionLog(base64Image: string) {
   try {
     const { createClient: createSessionClient } = await import("@/utils/supabase/server");
@@ -19,16 +56,21 @@ export async function uploadProductionLog(base64Image: string) {
     const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    // gemini-2.5-flash — актуальная модель: быстрая, дешёвая, отлично читает рукописный текст
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const prompt = `Ты — учетчик на заводе. На фото рукописный отчет о произведенной продукции сотрудником за день. 
-Твоя задача вытащить данные в формате JSON-массива. 
-Каждый объект массива должен содержать:
-- "product_name": строковое название детали/продукции.
-- "quantity": числовое количество.
-Игнорируй помарки. Верни СТРОГО массив JSON без markdown-разметки (\`\`\`json) и без лишнего текста.
-Пример: [{"product_name": "Деталь А", "quantity": 15}, {"product_name": "Деталь Б", "quantity": 5}]`;
+    const prompt = `Ты — учетчик на пекарне/кондитерском производстве. На фото рукописный отчет о произведенной продукции сотрудником за день.
+
+СПРАВОЧНИК ПРОДУКЦИИ (используй ТОЛЬКО эти названия, подбирай ближайшее совпадение):
+${PRODUCT_CATALOG}
+
+ПРАВИЛА:
+1. Сопоставляй рукописный текст с названиями из справочника выше. Если почерк нечёткий, выбирай САМЫЙ ПОХОЖИЙ вариант из справочника.
+2. Если указан размер (24, 30, 35) или формат (половина, четверть), включи в название.
+3. Если на фото написано сокращение (напр. "К/К" = Курица Картофель, "Б/Ш" = Брынза Шпинат), расшифруй полностью.
+4. Количество — всегда целое число.
+
+Верни СТРОГО JSON-массив без markdown-разметки и без лишнего текста.
+Формат: [{"product_name": "Название из справочника", "quantity": число}]`;
 
     const result = await model.generateContent([
       prompt,
@@ -44,12 +86,11 @@ export async function uploadProductionLog(base64Image: string) {
     let parsedData = [];
     
     try {
-      // Очистка от маркдауна если он всё же есть
       const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
       parsedData = JSON.parse(cleanText);
     } catch (e) {
       console.error("Failed to parse JSON from Gemini:", responseText);
-      return { success: false, error: "ИИ не смог распознать данные в нужном формате" };
+      return { success: false, error: "ИИ не смог распознать данные. Попробуйте сфотографировать чётче." };
     }
 
     if (!Array.isArray(parsedData) || parsedData.length === 0) {
@@ -62,8 +103,9 @@ export async function uploadProductionLog(base64Image: string) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Текущая дата сотрудника (локальная)
-    const recordDate = new Date().toISOString().split('T')[0];
+    // Дата по Алматы
+    const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
+    const recordDate = almatyNow.toISOString().split('T')[0];
 
     const inserts = parsedData.map((item: any) => ({
       employee_id: user.id,
@@ -97,13 +139,13 @@ export async function getTodayProductionLogs() {
     const { data: { user } } = await sessionClient.auth.getUser();
     if (!user) return { success: false, data: [] };
 
-    const { createClient: createAdminClient } = await import("@supabase/supabase-js");
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const recordDate = new Date().toISOString().split('T')[0];
+    const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
+    const recordDate = almatyNow.toISOString().split('T')[0];
     
     const { data } = await supabaseAdmin
       .from('production_logs')
@@ -115,5 +157,55 @@ export async function getTodayProductionLogs() {
     return { success: true, data: data || [] };
   } catch (err) {
     return { success: false, data: [] };
+  }
+}
+
+export async function updateProductionLog(logId: string, productName: string, quantity: number) {
+  try {
+    const { createClient: createSessionClient } = await import("@/utils/supabase/server");
+    const sessionClient = createSessionClient();
+    const { data: { user } } = await sessionClient.auth.getUser();
+    if (!user) return { success: false, error: "Необходима авторизация" };
+
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { error } = await supabaseAdmin
+      .from('production_logs')
+      .update({ product_name: productName, quantity })
+      .eq('id', logId)
+      .eq('employee_id', user.id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteProductionLog(logId: string) {
+  try {
+    const { createClient: createSessionClient } = await import("@/utils/supabase/server");
+    const sessionClient = createSessionClient();
+    const { data: { user } } = await sessionClient.auth.getUser();
+    if (!user) return { success: false, error: "Необходима авторизация" };
+
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { error } = await supabaseAdmin
+      .from('production_logs')
+      .delete()
+      .eq('id', logId)
+      .eq('employee_id', user.id);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }
