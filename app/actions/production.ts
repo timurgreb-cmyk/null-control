@@ -19,8 +19,8 @@ export async function uploadProductionLog(base64Image: string) {
     const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Используем самую новую модель
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash" });
+    // gemini-2.5-flash — актуальная модель: быстрая, дешёвая, отлично читает рукописный текст
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `Ты — учетчик на заводе. На фото рукописный отчет о произведенной продукции сотрудником за день. 
 Твоя задача вытащить данные в формате JSON-массива. 
