@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { logout } from "@/app/actions/auth";
-import { LogOut, UserCircle, Briefcase, Phone } from "lucide-react";
+import { LogOut, UserCircle, Briefcase, Phone, Clock } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -63,6 +63,19 @@ export default async function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <a 
+        href="/app/history"
+        className="w-full flex items-center justify-between p-4 bg-white border border-gray-100 text-gray-900 rounded-2xl font-bold shadow-sm active:scale-95 transition-all mb-4"
+      >
+        <div className="flex items-center">
+          <Clock className="w-5 h-5 mr-3 text-primary" />
+          История отметок
+        </div>
+        <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </a>
 
       <form action={logout}>
         <button

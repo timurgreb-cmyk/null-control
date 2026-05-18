@@ -33,9 +33,10 @@ export default async function AdminLayout({
   const navItems = [
     { name: "Дашборд", href: "/admin", icon: LayoutDashboard },
     { name: "Сотрудники", href: "/admin/employees", icon: Users },
-    { name: "Журнал отметок", href: "/admin/attendance", icon: Clock },
+    { name: "Журнал", href: "/admin/attendance", icon: Clock },
     { name: "Табель", href: "/admin/timesheet", icon: Clock },
-    { name: "Локации (QR)", href: "/admin/locations", icon: MapPin },
+    { name: "Выработка", href: "/admin/production", icon: LayoutDashboard },
+    { name: "Локации", href: "/admin/locations", icon: MapPin },
   ];
 
   return (
