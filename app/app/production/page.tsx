@@ -28,7 +28,7 @@ export default function ProductionPage() {
         const res = await uploadProductionLog(base64Str);
         if (res.success) {
           setSuccess(true);
-          setResult(res.data);
+          setResult(res.data || []);
         } else {
           setError(res.error || "Ошибка распознавания");
         }
