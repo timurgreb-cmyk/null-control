@@ -19,8 +19,8 @@ export async function uploadProductionLog(base64Image: string) {
     const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Используем gemini-1.5-flash для скорости и цены
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Используем самую умную и актуальную модель (Pro вместо быстрой Flash)
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
 
     const prompt = `Ты — учетчик на заводе. На фото рукописный отчет о произведенной продукции сотрудником за день. 
 Твоя задача вытащить данные в формате JSON-массива. 
@@ -87,5 +87,33 @@ export async function uploadProductionLog(base64Image: string) {
   } catch (error: any) {
     console.error("Production Upload Exception:", error);
     return { success: false, error: `Системная ошибка: ${error.message || "Неизвестная ошибка"}` };
+  }
+}
+
+export async function getTodayProductionLogs() {
+  try {
+    const { createClient: createSessionClient } = await import("@/utils/supabase/server");
+    const sessionClient = createSessionClient();
+    const { data: { user } } = await sessionClient.auth.getUser();
+    if (!user) return { success: false, data: [] };
+
+    const { createClient: createAdminClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const recordDate = new Date().toISOString().split('T')[0];
+    
+    const { data } = await supabaseAdmin
+      .from('production_logs')
+      .select('id, product_name, quantity, created_at')
+      .eq('employee_id', user.id)
+      .eq('record_date', recordDate)
+      .order('created_at', { ascending: false });
+
+    return { success: true, data: data || [] };
+  } catch (err) {
+    return { success: false, data: [] };
   }
 }

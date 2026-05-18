@@ -1,14 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { Camera, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { uploadProductionLog } from "@/app/actions/production";
+import { useState, useEffect } from "react";
+import { Camera, Loader2, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { uploadProductionLog, getTodayProductionLogs } from "@/app/actions/production";
 
 export default function ProductionPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+
+  const loadHistory = async () => {
+    const res = await getTodayProductionLogs();
+    if (res.success) {
+      setHistory(res.data);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -20,26 +32,66 @@ export default function ProductionPage() {
     setResult([]);
 
     try {
-      // Идеально было бы сжать через Canvas, но для MVP читаем как есть
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64Str = reader.result as string;
-        const res = await uploadProductionLog(base64Str);
-        if (res.success) {
-          setSuccess(true);
-          setResult(res.data || []);
-        } else {
-          setError(res.error || "Ошибка распознавания");
+      // Сжимаем изображение через Canvas, чтобы не словить 413 Payload Too Large (лимит 1MB)
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement("canvas");
+        // Ограничиваем максимальную ширину/высоту до 1024px
+        const MAX_DIMENSION = 1024;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height && width > MAX_DIMENSION) {
+          height *= MAX_DIMENSION / width;
+          width = MAX_DIMENSION;
+        } else if (height > MAX_DIMENSION) {
+          width *= MAX_DIMENSION / height;
+          height = MAX_DIMENSION;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setError("Ошибка создания холста для сжатия");
+          setLoading(false);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Получаем Base64 с качеством 70%
+        const compressedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+
+        try {
+          const res = await uploadProductionLog(compressedBase64);
+          if (res.success) {
+            setSuccess(true);
+            setResult(res.data || []);
+            loadHistory(); // Обновляем историю после успешной загрузки
+          } else {
+            setError(res.error || "Ошибка распознавания");
+          }
+        } catch (serverErr: any) {
+          setError(serverErr.message || "Ошибка соединения с сервером");
         }
         setLoading(false);
       };
-      reader.onerror = () => {
-        setError("Ошибка чтения файла");
+
+      img.onerror = () => {
+        setError("Ошибка загрузки изображения");
         setLoading(false);
       };
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Неизвестная ошибка");
       setLoading(false);
     }
   };
@@ -77,7 +129,7 @@ export default function ProductionPage() {
       )}
 
       {!loading ? (
-        <div className="relative">
+        <div className="relative mb-8">
           <input
             type="file"
             accept="image/*"
@@ -94,12 +146,43 @@ export default function ProductionPage() {
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-gray-100 rounded-3xl p-10 flex flex-col items-center justify-center shadow-sm">
+        <div className="bg-white border border-gray-100 rounded-3xl p-10 flex flex-col items-center justify-center shadow-sm mb-8">
           <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
           <span className="font-bold text-gray-900">Анализ изображения...</span>
           <span className="text-gray-500 text-sm mt-2 text-center">Искусственный интеллект читает ваш почерк</span>
         </div>
       )}
+
+      {/* История за сегодня */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-gray-50 px-5 py-4 border-b border-gray-100 flex items-center">
+          <Clock className="w-5 h-5 text-gray-400 mr-2" />
+          <h2 className="font-bold text-gray-900">Загружено сегодня</h2>
+        </div>
+        
+        {history.length === 0 ? (
+          <div className="p-8 text-center text-gray-500 text-sm">
+            Вы еще ничего не загружали сегодня
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {history.map((item) => {
+              const time = new Date(item.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+              return (
+                <div key={item.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                  <div>
+                    <p className="font-medium text-gray-900">{item.product_name}</p>
+                    <p className="text-xs text-gray-400">{time}</p>
+                  </div>
+                  <div className="bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-lg text-sm">
+                    {item.quantity} шт.
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
