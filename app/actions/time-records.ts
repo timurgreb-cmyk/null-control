@@ -89,6 +89,39 @@ export async function processQRScan(locationId: string, clientTimeIso?: string) 
       return { success: false, error: `Ошибка записи: ${insertError.message}` };
     }
 
+    // Получаем имя сотрудника для уведомления
+    const { data: employeeProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .single();
+
+    // Отправка уведомления в Telegram (асинхронно)
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+    const tgChatId = process.env.TELEGRAM_CHAT_ID;
+    
+    if (tgToken && tgChatId) {
+      const actionText = newRecordType === "check_in" ? "🟢 ПРИХОД" : "🔴 УХОД";
+      // Форматируем время в часовом поясе Алматы (по умолчанию для КЗ)
+      const timeStr = new Intl.DateTimeFormat('ru-RU', { 
+        timeZone: 'Asia/Almaty', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      }).format(now);
+      
+      const empName = employeeProfile?.full_name || "Неизвестный сотрудник";
+      const text = `${actionText}\nСотрудник: ${empName}\nЛокация: ${location.name}\nВремя: ${timeStr}`;
+      
+      fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: tgChatId,
+          text: text
+        })
+      }).catch(err => console.error("TG Notification Error:", err));
+    }
+
     const { revalidatePath } = await import("next/cache");
     revalidatePath("/", "layout");
 

@@ -2,9 +2,25 @@
 
 import { useState } from "react";
 import LocalTime from "@/components/LocalTime";
+import { processOvertimeApproval } from "@/app/actions/timesheet";
 
 export default function TimesheetRow({ row }: { row: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleApprove = async (e: React.MouseEvent, detail: any) => {
+    e.stopPropagation();
+    setLoading(true);
+    await processOvertimeApproval(row.id, detail.day, detail.calculatedOvertime, detail.calculatedOvertime, 'approved');
+    setLoading(false);
+  };
+
+  const handleReject = async (e: React.MouseEvent, detail: any) => {
+    e.stopPropagation();
+    setLoading(true);
+    await processOvertimeApproval(row.id, detail.day, detail.calculatedOvertime, 0, 'rejected');
+    setLoading(false);
+  };
 
   return (
     <>
@@ -30,7 +46,7 @@ export default function TimesheetRow({ row }: { row: any }) {
           {row.shift_rate ? `${row.shift_rate} ₸` : "Не задана"}
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm text-orange-600 font-medium">
-          {row.overtimeHours > 0 ? `+${row.overtimeHours.toFixed(1)} ч` : "—"}
+          {row.overtimeHours > 0 ? `+${row.overtimeHours} ч` : "—"}
         </td>
         <td className="px-6 py-4 whitespace-nowrap">
           {row.missingCheckouts > 0 ? (
@@ -52,7 +68,7 @@ export default function TimesheetRow({ row }: { row: any }) {
             <div className="text-xs font-semibold text-gray-500 uppercase mb-3 px-2">Детализация по дням:</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {row.dailyDetails.map((detail: any) => (
-                <div key={detail.day} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                <div key={detail.day} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm flex flex-col">
                   <div className="flex justify-between items-center mb-2">
                     <span suppressHydrationWarning className="font-bold text-gray-700">{detail.formattedDay}</span>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${
@@ -67,10 +83,43 @@ export default function TimesheetRow({ row }: { row: any }) {
                     <div className="text-gray-500">Уход: <span className="text-gray-900 font-medium">{detail.lastOut ? <LocalTime isoString={detail.lastOut} formatStr="HH:mm" /> : "—"}</span></div>
                   </div>
                   {detail.status === 'complete' && (
-                    <div className="flex justify-between text-xs mt-2 pt-2 border-t border-gray-100">
-                      <span className="text-gray-500">Отработано: <span className="font-medium text-gray-700">{detail.actualHours.toFixed(1)} ч.</span></span>
-                      {detail.overtime > 0 && (
-                        <span className="text-orange-600 font-medium">+ {detail.overtime.toFixed(1)} ч. переработки</span>
+                    <div className="flex flex-col text-xs mt-2 pt-2 border-t border-gray-100 gap-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Отработано: <span className="font-medium text-gray-700">{detail.actualHours.toFixed(1)} ч.</span></span>
+                        
+                        {detail.calculatedOvertime > 0 && !detail.requiresApproval && (
+                          <span className="text-orange-600 font-medium">+ {detail.calculatedOvertime} ч. переработки</span>
+                        )}
+                        
+                        {detail.requiresApproval && detail.approvalStatus === 'approved' && (
+                          <span className="text-green-600 font-medium">+ {detail.overtime} ч. (одобрено)</span>
+                        )}
+                        
+                        {detail.requiresApproval && detail.approvalStatus === 'rejected' && (
+                          <span className="text-red-500 font-medium line-through">{detail.calculatedOvertime} ч. откл.</span>
+                        )}
+                      </div>
+                      
+                      {detail.requiresApproval && detail.approvalStatus === 'pending' && (
+                        <div className="flex flex-col bg-orange-50 p-2 rounded border border-orange-200 mt-1">
+                          <span className="text-orange-800 font-medium mb-2">Переработка {detail.calculatedOvertime} ч. требует проверки</span>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={(e) => handleApprove(e, detail)} 
+                              disabled={loading}
+                              className="flex-1 bg-green-500 text-white px-2 py-1.5 rounded text-[11px] font-bold hover:bg-green-600 transition-colors disabled:opacity-50"
+                            >
+                              Одобрить
+                            </button>
+                            <button 
+                              onClick={(e) => handleReject(e, detail)} 
+                              disabled={loading}
+                              className="flex-1 bg-red-500 text-white px-2 py-1.5 rounded text-[11px] font-bold hover:bg-red-600 transition-colors disabled:opacity-50"
+                            >
+                              Отклонить
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}

@@ -49,6 +49,13 @@ export default async function TimesheetPage({
     .lte("recorded_at", endDate.toISOString())
     .order("recorded_at", { ascending: true });
 
+  // 3.5 Получаем решения по переработкам (свыше 3 часов)
+  const { data: approvalsData } = await supabase
+    .from("overtime_approvals")
+    .select("*")
+    .gte("record_date", format(startDate, 'yyyy-MM-dd'))
+    .lte("record_date", format(endDate, 'yyyy-MM-dd'));
+
   // 4. Агрегация данных
   const timesheet = employees?.map(emp => {
     const empRecords = records?.filter(r => r.employee_id === emp.id) || [];
@@ -95,10 +102,31 @@ export default async function TimesheetPage({
         const locId = firstInRec?.location_id;
         const baseHours = locId && locationMap[locId] ? locationMap[locId] : 8;
         
-        let overtime = 0;
+        let calculatedOvertime = 0;
         if (emp.is_overtime_enabled !== false) {
-          overtime = Math.max(0, actualHours - baseHours);
+          // 1 час идет как обед, т.е. отнимаем (база + 1)
+          const rawOvertime = actualHours - (baseHours + 1);
+          if (rawOvertime > 0) {
+            // Переработки считаются только за целый час
+            calculatedOvertime = Math.floor(rawOvertime);
+          }
         }
+        
+        let overtime = calculatedOvertime;
+        let requiresApproval = calculatedOvertime > 3;
+        let approvalStatus = 'none';
+
+        if (requiresApproval) {
+          const existingApproval = approvalsData?.find(a => a.employee_id === emp.id && a.record_date === day);
+          if (existingApproval) {
+            approvalStatus = existingApproval.status;
+            overtime = existingApproval.status === 'approved' ? existingApproval.approved_hours : 0;
+          } else {
+            approvalStatus = 'pending';
+            overtime = 0; // Пока не одобрено, не начисляем
+          }
+        }
+
         totalOvertimeHours += overtime;
 
         dailyDetails.push({ 
@@ -109,7 +137,10 @@ export default async function TimesheetPage({
           firstIn, 
           lastOut, 
           actualHours,
+          calculatedOvertime,
           overtime,
+          requiresApproval,
+          approvalStatus,
           status: 'complete' 
         });
       } else if (firstIn && !lastOut) {
