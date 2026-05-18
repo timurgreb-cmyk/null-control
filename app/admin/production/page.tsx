@@ -1,4 +1,3 @@
-// ok
 import { createClient } from "@supabase/supabase-js";
 import { format, parseISO } from "date-fns";
 import { ru } from "date-fns/locale";
