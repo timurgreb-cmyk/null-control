@@ -208,3 +208,37 @@ export async function createManualRecord(formData: FormData) {
     return { error: err.message };
   }
 }
+
+export async function getMyTimeRecords() {
+  try {
+    const { createClient: createSessionClient } = await import("@/utils/supabase/server");
+    const sessionClient = createSessionClient();
+    const { data: { user } } = await sessionClient.auth.getUser();
+    if (!user) return { success: false, data: [] };
+
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data, error } = await supabaseAdmin
+      .from("time_records")
+      .select(`
+        id,
+        record_type,
+        recorded_at,
+        locations (name)
+      `)
+      .eq("employee_id", user.id)
+      .order("recorded_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error("Fetch history error:", error);
+      return { success: false, data: [] };
+    }
+    return { success: true, data: data || [] };
+  } catch (err) {
+    return { success: false, data: [] };
+  }
+}

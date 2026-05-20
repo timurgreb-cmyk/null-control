@@ -17,6 +17,26 @@ export default function ScanPage() {
   const [resultData, setResultData] = useState<{type: string, location: string} | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
 
+  // Принудительно освобождаем камеру при уходе со страницы или выключении сканера
+  useEffect(() => {
+    return () => {
+      try {
+        const videoElements = document.querySelectorAll("video");
+        videoElements.forEach((video) => {
+          const stream = video.srcObject as MediaStream;
+          if (stream && typeof stream.getTracks === "function") {
+            stream.getTracks().forEach((track) => {
+              track.stop();
+            });
+            video.srcObject = null;
+          }
+        });
+      } catch (err) {
+        console.error("Error stopping camera tracks:", err);
+      }
+    };
+  }, [cameraActive]);
+
   // Камера будет запускаться только по кнопке, 
   // чтобы iOS Safari не запрашивал разрешение при каждом открытии приложения
 
