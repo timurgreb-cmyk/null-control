@@ -84,6 +84,7 @@ export async function processQRScan(locationId: string, clientTimeIso?: string) 
       // Проверка выработки перед уходом
       const isTester = employeeProfile?.full_name?.toLowerCase().includes("тимур") || 
                        employeeProfile?.full_name?.toLowerCase().includes("рукием") || 
+                       employeeProfile?.full_name?.toLowerCase().includes("кристина") || 
                        employeeProfile?.can_upload_production;
 
       if (isTester) {

@@ -22,9 +22,10 @@ export default function EmployeeLayout({
     fetchProfile();
   }, []);
 
-  // Доступ только для Тимура и Рукием, либо если стоит галочка (если ты её добавлял)
+  // Доступ только для Тимура, Рукием и Кристины, либо если стоит галочка
   const isTester = profile?.full_name?.toLowerCase().includes("тимур") || 
                    profile?.full_name?.toLowerCase().includes("рукием") || 
+                   profile?.full_name?.toLowerCase().includes("кристина") || 
                    profile?.can_upload_production;
 
   const tabs = [
