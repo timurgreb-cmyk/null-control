@@ -56,7 +56,6 @@ export async function uploadProductionLog(base64Image: string) {
     const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `Ты — учетчик на пекарне/кондитерском производстве. На фото рукописный отчет о произведенной продукции сотрудником за день.
 
@@ -72,15 +71,32 @@ ${PRODUCT_CATALOG}
 Верни СТРОГО JSON-массив без markdown-разметки и без лишнего текста.
 Формат: [{"product_name": "Название из справочника", "quantity": число}]`;
 
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          data: base64Data,
-          mimeType: mimeType
+    let result;
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: mimeType
+          }
         }
-      }
-    ]);
+      ]);
+    } catch (err: any) {
+      console.warn("Gemini 2.5 Flash failed, trying fallback to 1.5 Flash:", err?.message || err);
+      // Стабильная резервная модель с огромными лимитами
+      const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      result = await fallbackModel.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: mimeType
+          }
+        }
+      ]);
+    }
 
     const responseText = result.response.text();
     let parsedData = [];
