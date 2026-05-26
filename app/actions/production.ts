@@ -72,30 +72,54 @@ ${PRODUCT_CATALOG}
 Формат: [{"product_name": "Название из справочника", "quantity": число}]`;
 
     let result;
-    try {
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-      result = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: mimeType
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"];
+    let lastError = null;
+
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const modelName = modelsToTry[i];
+      try {
+        console.log(`Attempting Gemini model: ${modelName}`);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        result = await model.generateContent([
+          prompt,
+          {
+            inlineData: {
+              data: base64Data,
+              mimeType: mimeType
+            }
+          }
+        ]);
+        if (result) break;
+      } catch (err: any) {
+        console.warn(`Model ${modelName} failed:`, err?.message || err);
+        lastError = err;
+        
+        // Если упала основная модель, ждем 1.5 сек и пробуем её ещё один раз (защита от кратковременного сбоя сети)
+        if (i === 0) {
+          try {
+            console.log(`Retrying ${modelName} after 1.5s delay...`);
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            const model = genAI.getGenerativeModel({ model: modelName });
+            result = await model.generateContent([
+              prompt,
+              {
+                inlineData: {
+                  data: base64Data,
+                  mimeType: mimeType
+                }
+              }
+            ]);
+            if (result) break;
+          } catch (retryErr: any) {
+            console.warn(`Retry of ${modelName} failed:`, retryErr?.message || retryErr);
+            lastError = retryErr;
           }
         }
-      ]);
-    } catch (err: any) {
-      console.warn("Gemini 2.5 Flash failed, trying fallback to 1.5 Flash:", err?.message || err);
-      // Стабильная резервная модель с огромными лимитами
-      const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-      result = await fallbackModel.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: mimeType
-          }
-        }
-      ]);
+      }
+    }
+
+    if (!result) {
+      throw lastError || new Error("Все доступные ИИ-модели вернули ошибку.");
     }
 
     const responseText = result.response.text();
