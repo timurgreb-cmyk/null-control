@@ -249,3 +249,38 @@ export async function deleteProductionLog(logId: string) {
     return { success: false, error: err.message };
   }
 }
+
+export async function addManualProductionLog(productName: string, quantity: number) {
+  try {
+    const { createClient: createSessionClient } = await import("@/utils/supabase/server");
+    const sessionClient = createSessionClient();
+    const { data: { user } } = await sessionClient.auth.getUser();
+    if (!user) return { success: false, error: "Необходима авторизация" };
+
+    if (!productName || quantity <= 0) {
+      return { success: false, error: "Неверное название товара или количество" };
+    }
+
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
+    const recordDate = almatyNow.toISOString().split('T')[0];
+
+    const { error } = await supabaseAdmin
+      .from('production_logs')
+      .insert({
+        employee_id: user.id,
+        product_name: productName,
+        quantity,
+        record_date: recordDate
+      });
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
