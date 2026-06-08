@@ -72,7 +72,13 @@ ${PRODUCT_CATALOG}
 Формат: [{"product_name": "Название из справочника", "quantity": число}]`;
 
     let result;
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"];
+    const modelsToTry = [
+      "gemini-2.5-flash", 
+      "gemini-3.5-flash", 
+      "gemini-3.1-pro", 
+      "gemini-2.5-pro", 
+      "gemini-2.5-flash-lite"
+    ];
     let lastError = null;
 
     for (let i = 0; i < modelsToTry.length; i++) {
@@ -93,6 +99,15 @@ ${PRODUCT_CATALOG}
       } catch (err: any) {
         console.warn(`Model ${modelName} failed:`, err?.message || err);
         lastError = err;
+
+        // Если это ошибка 403 Forbidden (Ваш проект заблокирован Google/denied access)
+        const errMsg = String(err?.message || err);
+        if (errMsg.includes("403 Forbidden") || errMsg.includes("denied access") || errMsg.includes("Forbidden")) {
+          return { 
+            success: false, 
+            error: "Ваш API-ключ или проект Google AI Studio заблокирован (403 Forbidden: Your project has been denied access). Пожалуйста, создайте новый API-ключ в Google AI Studio (желательно на другом/личном Gmail-аккаунте) и обновите переменную GEMINI_API_KEY в Vercel."
+          };
+        }
         
         // Если упала основная модель, ждем 1.5 сек и пробуем её ещё один раз (защита от кратковременного сбоя сети)
         if (i === 0) {
@@ -113,6 +128,14 @@ ${PRODUCT_CATALOG}
           } catch (retryErr: any) {
             console.warn(`Retry of ${modelName} failed:`, retryErr?.message || retryErr);
             lastError = retryErr;
+            
+            const retryErrMsg = String(retryErr?.message || retryErr);
+            if (retryErrMsg.includes("403 Forbidden") || retryErrMsg.includes("denied access") || retryErrMsg.includes("Forbidden")) {
+              return { 
+                success: false, 
+                error: "Ваш API-ключ или проект Google AI Studio заблокирован (403 Forbidden: Your project has been denied access). Пожалуйста, создайте новый API-ключ в Google AI Studio (желательно на другом/личном Gmail-аккаунте) и обновите переменную GEMINI_API_KEY в Vercel."
+              };
+            }
           }
         }
       }

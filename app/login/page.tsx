@@ -2,7 +2,7 @@
 
 import { loginWithPin, login } from "@/app/actions/auth";
 import { useState, useEffect } from "react";
-import { Lock, Delete } from "lucide-react";
+import { Lock, Delete, Fingerprint } from "lucide-react";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"pin" | "admin">("pin");
@@ -11,6 +11,58 @@ export default function LoginPage() {
   const [pin, setPin] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hasCred = !!localStorage.getItem("biometric_cred_id");
+      const supportsWebAuthn = !!window.PublicKeyCredential;
+      setBiometricsAvailable(hasCred && supportsWebAuthn);
+    }
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    try {
+      const credIdStr = localStorage.getItem("biometric_cred_id");
+      const savedPin = localStorage.getItem("biometric_pin");
+      if (!credIdStr || !savedPin) return;
+
+      setLoading(true);
+      setErrorMsg(null);
+
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+
+      const credentialId = Uint8Array.from(atob(credIdStr), c => c.charCodeAt(0));
+
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname,
+          allowCredentials: [{
+            id: credentialId,
+            type: "public-key"
+          }],
+          userVerification: "required",
+          timeout: 60000
+        }
+      });
+
+      if (assertion) {
+        await handlePinLogin(savedPin);
+      } else {
+        setErrorMsg("Ошибка сканирования биометрии");
+        setLoading(false);
+      }
+    } catch (err: any) {
+      console.error("Biometric error:", err);
+      // Не выводим ошибку, если пользователь просто отменил сканирование (NotAllowedError)
+      if (err.name !== "NotAllowedError") {
+        setErrorMsg(err.message || "Ошибка входа по биометрии");
+      }
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (mode === "pin" && pin.length === 5) {
@@ -26,6 +78,10 @@ export default function LoginPage() {
       setErrorMsg(result.error);
       setPin("");
       setLoading(false);
+    } else {
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("app_unlocked", "true");
+      }
     }
   };
 
@@ -43,6 +99,10 @@ export default function LoginPage() {
     if (result?.error) {
       setErrorMsg(result.error);
       setLoading(false);
+    } else {
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("app_unlocked", "true");
+      }
     }
   };
 
@@ -108,7 +168,19 @@ export default function LoginPage() {
                   {num}
                 </button>
               ))}
-              <div className="w-full aspect-square" />
+              {biometricsAvailable ? (
+                <button
+                  type="button"
+                  onClick={handleBiometricLogin}
+                  disabled={loading}
+                  className="w-full aspect-square flex items-center justify-center text-primary bg-primary/10 rounded-full shadow-sm hover:bg-primary/20 active:scale-90 transition-all cursor-pointer"
+                  title="Войти с помощью биометрии"
+                >
+                  <Fingerprint className="w-8 h-8" />
+                </button>
+              ) : (
+                <div className="w-full aspect-square" />
+              )}
               <button
                 type="button"
                 onClick={() => handleNumberClick(0)}

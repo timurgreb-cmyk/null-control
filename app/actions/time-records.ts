@@ -81,13 +81,10 @@ export async function processQRScan(locationId: string, clientTimeIso?: string) 
     if (lastRecord && lastRecord.record_type === "check_in") {
       newRecordType = "check_out";
 
-      // Проверка выработки перед уходом
-      const isTester = employeeProfile?.full_name?.toLowerCase().includes("тимур") || 
-                       employeeProfile?.full_name?.toLowerCase().includes("рукия") || 
-                       employeeProfile?.full_name?.toLowerCase().includes("кристина") || 
-                       employeeProfile?.can_upload_production;
+      // Проверка выработки перед уходом (включена для всех сотрудников)
+      const isRequired = true;
 
-      if (isTester) {
+      if (isRequired) {
         // Ищем записи о выработке, созданные ПОСЛЕ времени начала смены (check_in)
         const { data: prodLogs } = await supabaseAdmin
           .from("production_logs")
