@@ -81,8 +81,9 @@ export async function processQRScan(locationId: string, clientTimeIso?: string) 
     if (lastRecord && lastRecord.record_type === "check_in") {
       newRecordType = "check_out";
 
-      // Проверка выработки перед уходом (включена для всех сотрудников)
-      const isRequired = true;
+      // Проверка выработки перед уходом (включена для всех сотрудников, кроме Агаты)
+      const isAgata = employeeProfile?.full_name?.toLowerCase().includes("агата");
+      const isRequired = !isAgata;
 
       if (isRequired) {
         // Ищем записи о выработке, созданные ПОСЛЕ времени начала смены (check_in)

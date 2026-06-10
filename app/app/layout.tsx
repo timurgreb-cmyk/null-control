@@ -22,11 +22,17 @@ export default function EmployeeLayout({
     fetchProfile();
   }, []);
 
+  const isAgata = profile?.full_name?.toLowerCase().includes("агата");
+
   const tabs = [
     { name: "Сканер", href: "/app/scan", icon: ScanLine },
-    { name: "Выработка", href: "/app/production", icon: Briefcase },
-    { name: "Профиль", href: "/app/profile", icon: UserCircle },
   ];
+
+  if (!isAgata) {
+    tabs.push({ name: "Выработка", href: "/app/production", icon: Briefcase });
+  }
+
+  tabs.push({ name: "Профиль", href: "/app/profile", icon: UserCircle });
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F3F4F6] relative">
