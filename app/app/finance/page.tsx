@@ -13,12 +13,12 @@ import {
   Plus, 
   Trash2, 
   Calendar, 
-  DollarSign, 
   FileText, 
   Loader2, 
   User,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Coins
 } from "lucide-react";
 
 export default function FinancePage() {
@@ -32,6 +32,7 @@ export default function FinancePage() {
   
   // Form fields
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState("KZT");
   const [articleId, setArticleId] = useState("");
   const [counterpartyId, setCounterpartyId] = useState("");
   const [description, setDescription] = useState("");
@@ -117,6 +118,7 @@ export default function FinancePage() {
     try {
       const res = await addExpense(
         parseFloat(amount),
+        currency,
         articleId || null,
         counterpartyId || null,
         description,
@@ -160,15 +162,34 @@ export default function FinancePage() {
     }
   };
 
-  // Format amount to beautiful rubles
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(val);
+  // Format amount to beautiful currencies
+  const formatCurrency = (val: number, curr: string) => {
+    const formattedCurr = curr || "KZT";
+    let locale = "kk-KZ";
+    if (formattedCurr === "RUB") locale = "ru-RU";
+    else if (formattedCurr === "USD") locale = "en-US";
+    else if (formattedCurr === "EUR") locale = "de-DE";
+
+    try {
+      return new Intl.NumberFormat(locale, { style: "currency", currency: formattedCurr, maximumFractionDigits: 0 }).format(val);
+    } catch (e) {
+      const symbols: Record<string, string> = { KZT: "₸", RUB: "₽", USD: "$", EUR: "€" };
+      return `${val.toLocaleString()} ${symbols[formattedCurr] || formattedCurr}`;
+    }
   };
 
-  // Group or calculate sum of expenses logged today
-  const todaySum = expenses
-    .filter(exp => exp.expense_date === expenseDate)
-    .reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+  // Group daily expenses by currency and calculate sums
+  const todayExpenses = expenses.filter(exp => exp.expense_date === expenseDate);
+  const dailySums: Record<string, number> = {};
+  
+  todayExpenses.forEach(exp => {
+    const curr = exp.currency || "KZT";
+    dailySums[curr] = (dailySums[curr] || 0) + parseFloat(exp.amount);
+  });
+
+  const dailySumText = Object.entries(dailySums).length > 0
+    ? Object.entries(dailySums).map(([curr, val]) => formatCurrency(val, curr)).join(" + ")
+    : formatCurrency(0, "KZT");
 
   if (loading) {
     return (
@@ -224,23 +245,38 @@ export default function FinancePage() {
         <h2 className="text-base font-bold text-gray-900 mb-4">Внести расход</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           
-          {/* Amount Field */}
+          {/* Amount and Currency Field */}
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Сумма (₽) *</label>
-            <div className="relative rounded-2xl shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <DollarSign className="h-5 w-5 text-gray-400" />
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Сумма *</label>
+            <div className="flex space-x-2">
+              <div className="relative rounded-2xl shadow-sm flex-1">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Coins className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="block w-full pl-11 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 font-bold placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-lg"
+                />
               </div>
-              <input
-                type="number"
-                inputMode="decimal"
-                pattern="[0-9]*"
-                required
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="block w-full pl-11 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 font-bold placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-lg"
-              />
+
+              <div className="w-28 shrink-0">
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="block w-full px-3 py-3.5 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm cursor-pointer"
+                >
+                  <option value="KZT">KZT (₸)</option>
+                  <option value="RUB">RUB (₽)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -301,7 +337,7 @@ export default function FinancePage() {
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Например: Оплата материалов для цеха..."
+                placeholder="Например: Закуп муки в мешках..."
                 rows={2}
                 className="block w-full pl-11 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm resize-none"
               />
@@ -335,9 +371,9 @@ export default function FinancePage() {
           <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Итог за выбранную дату</span>
           <p className="text-[10px] text-emerald-600 font-medium">({expenseDate})</p>
         </div>
-        <div className="text-right">
-          <span className="text-2xl font-black text-emerald-700 tracking-tight">
-            {formatCurrency(todaySum)}
+        <div className="text-right pl-4">
+          <span className="text-xl font-black text-emerald-700 tracking-tight block max-w-[200px] break-words">
+            {dailySumText}
           </span>
         </div>
       </div>
@@ -364,7 +400,7 @@ export default function FinancePage() {
                 <div className="space-y-1.5 min-w-0 pr-2">
                   <div className="flex items-center space-x-2">
                     <span className="text-base font-black text-gray-900 tracking-tight">
-                      {formatCurrency(parseFloat(exp.amount))}
+                      {formatCurrency(parseFloat(exp.amount), exp.currency)}
                     </span>
                     <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full font-bold">
                       {exp.expense_date}

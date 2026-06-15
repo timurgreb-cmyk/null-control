@@ -23,7 +23,9 @@ import {
   CheckCircle2,
   Filter,
   RefreshCw,
-  Search
+  Search,
+  Coins,
+  UserCheck
 } from "lucide-react";
 
 export default function AdminFinancePage() {
@@ -47,6 +49,9 @@ export default function AdminFinancePage() {
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   });
+
+  // Filter currency for analytics charts
+  const [analyticsCurrency, setAnalyticsCurrency] = useState("KZT");
 
   // Directories & Expenses
   const [articles, setArticles] = useState<any[]>([]);
@@ -191,8 +196,8 @@ export default function AdminFinancePage() {
   };
 
   // Delete Expense
-  const handleDeleteExpense = async (id: string, amount: number, employee: string) => {
-    if (!confirm(`Удалить запись о расходе на сумму ${formatCurrency(amount)} сотрудника ${employee}?`)) {
+  const handleDeleteExpense = async (id: string, amount: number, currency: string, employee: string) => {
+    if (!confirm(`Удалить запись о расходе на сумму ${formatCurrency(amount, currency)} сотрудника ${employee}?`)) {
       return;
     }
 
@@ -210,13 +215,39 @@ export default function AdminFinancePage() {
   };
 
   // Currency Formatter
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(val);
+  const formatCurrency = (val: number, curr: string = "KZT") => {
+    const formattedCurr = curr || "KZT";
+    let locale = "kk-KZ";
+    if (formattedCurr === "RUB") locale = "ru-RU";
+    else if (formattedCurr === "USD") locale = "en-US";
+    else if (formattedCurr === "EUR") locale = "de-DE";
+
+    try {
+      return new Intl.NumberFormat(locale, { style: "currency", currency: formattedCurr, maximumFractionDigits: 0 }).format(val);
+    } catch (e) {
+      const symbols: Record<string, string> = { KZT: "₸", RUB: "₽", USD: "$", EUR: "€" };
+      return `${val.toLocaleString()} ${symbols[formattedCurr] || formattedCurr}`;
+    }
   };
 
-  // Calculate statistics
-  const totalSpent = expenses.reduce((sum, item) => sum + parseFloat(item.amount), 0);
-  
+  // Group stats by currency
+  const getGroupedSumsText = (expList: any[]) => {
+    const sums: Record<string, number> = {};
+    expList.forEach(item => {
+      const curr = item.currency || "KZT";
+      sums[curr] = (sums[curr] || 0) + parseFloat(item.amount);
+    });
+    
+    const entries = Object.entries(sums);
+    if (entries.length === 0) return formatCurrency(0, "KZT");
+    return entries.map(([curr, val]) => formatCurrency(val, curr)).join(" | ");
+  };
+
+  // Filter analytics by selected currency
+  const currencyFilteredExpenses = expenses.filter(item => (item.currency || "KZT") === analyticsCurrency);
+  const totalSpentFiltered = currencyFilteredExpenses.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+
+  // Today stats
   const todayStr = (() => {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -224,25 +255,23 @@ export default function AdminFinancePage() {
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   })();
-  const todaySpent = expenses
-    .filter(item => item.expense_date === todayStr)
-    .reduce((sum, item) => sum + parseFloat(item.amount), 0);
+  const todayExpenses = expenses.filter(item => item.expense_date === todayStr);
 
   // Calculate article breakdown
   const articleBreakdown = articles.map(art => {
-    const spent = expenses
+    const spent = currencyFilteredExpenses
       .filter(item => item.article_id === art.id)
       .reduce((sum, item) => sum + parseFloat(item.amount), 0);
     return {
       id: art.id,
       name: art.name,
       spent,
-      percentage: totalSpent > 0 ? Math.round((spent / totalSpent) * 100) : 0
+      percentage: totalSpentFiltered > 0 ? Math.round((spent / totalSpentFiltered) * 100) : 0
     };
   }).filter(item => item.spent > 0).sort((a, b) => b.spent - a.spent);
 
   // Add a "Без статьи" entry if there are expenses with null article_id
-  const noArticleSpent = expenses
+  const noArticleSpent = currencyFilteredExpenses
     .filter(item => !item.article_id)
     .reduce((sum, item) => sum + parseFloat(item.amount), 0);
   if (noArticleSpent > 0) {
@@ -250,24 +279,24 @@ export default function AdminFinancePage() {
       id: "null",
       name: "Без статьи (не указана)",
       spent: noArticleSpent,
-      percentage: totalSpent > 0 ? Math.round((noArticleSpent / totalSpent) * 100) : 0
+      percentage: totalSpentFiltered > 0 ? Math.round((noArticleSpent / totalSpentFiltered) * 100) : 0
     });
   }
 
   // Calculate counterparty breakdown
   const counterpartyBreakdown = counterparties.map(cp => {
-    const spent = expenses
+    const spent = currencyFilteredExpenses
       .filter(item => item.counterparty_id === cp.id)
       .reduce((sum, item) => sum + parseFloat(item.amount), 0);
     return {
       id: cp.id,
       name: cp.name,
       spent,
-      percentage: totalSpent > 0 ? Math.round((spent / totalSpent) * 100) : 0
+      percentage: totalSpentFiltered > 0 ? Math.round((spent / totalSpentFiltered) * 100) : 0
     };
   }).filter(item => item.spent > 0).sort((a, b) => b.spent - a.spent);
 
-  const noCounterpartySpent = expenses
+  const noCounterpartySpent = currencyFilteredExpenses
     .filter(item => !item.counterparty_id)
     .reduce((sum, item) => sum + parseFloat(item.amount), 0);
   if (noCounterpartySpent > 0) {
@@ -275,9 +304,27 @@ export default function AdminFinancePage() {
       id: "null",
       name: "Без контрагента",
       spent: noCounterpartySpent,
-      percentage: totalSpent > 0 ? Math.round((noCounterpartySpent / totalSpent) * 100) : 0
+      percentage: totalSpentFiltered > 0 ? Math.round((noCounterpartySpent / totalSpentFiltered) * 100) : 0
     });
   }
+
+  // Consolidated Employee Report (Breakdown by employee)
+  const employeeMap: Record<string, { id: string, name: string, spent: number }> = {};
+  currencyFilteredExpenses.forEach(exp => {
+    const empId = exp.employee_id;
+    const empName = exp.profile?.full_name || "Удаленный сотрудник";
+    if (!employeeMap[empId]) {
+      employeeMap[empId] = { id: empId, name: empName, spent: 0 };
+    }
+    employeeMap[empId].spent += parseFloat(exp.amount);
+  });
+
+  const employeeBreakdown = Object.values(employeeMap)
+    .sort((a, b) => b.spent - a.spent)
+    .map(item => ({
+      ...item,
+      percentage: totalSpentFiltered > 0 ? Math.round((item.spent / totalSpentFiltered) * 100) : 0
+    }));
 
   // Filter expenses list by search query
   const filteredExpenses = expenses.filter(exp => {
@@ -288,7 +335,8 @@ export default function AdminFinancePage() {
     const cpName = exp.counterparty?.name?.toLowerCase() || "";
     const desc = exp.description?.toLowerCase() || "";
     const amt = exp.amount?.toString() || "";
-    return empName.includes(query) || artName.includes(query) || cpName.includes(query) || desc.includes(query) || amt.includes(query);
+    const curr = exp.currency?.toLowerCase() || "";
+    return empName.includes(query) || artName.includes(query) || cpName.includes(query) || desc.includes(query) || amt.includes(query) || curr.includes(query);
   });
 
   return (
@@ -298,7 +346,7 @@ export default function AdminFinancePage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Финансовый учет</h1>
           <p className="text-gray-500 mt-1">
-            Контроль расходов предприятия, настройка каталогов контрагентов и статей трат.
+            Контроль расходов предприятия, мультивалютные отчеты трех сотрудников (Альфия, Эльмира, Тимур).
           </p>
         </div>
         <button 
@@ -336,7 +384,7 @@ export default function AdminFinancePage() {
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
           >
-            Статистика и Журнал
+            Сводный отчет и Журнал
           </button>
           <button
             onClick={() => setActiveTab("articles")}
@@ -372,10 +420,10 @@ export default function AdminFinancePage() {
           {activeTab === "overview" && (
             <div className="space-y-6">
               
-              {/* Date Filters Row */}
+              {/* Date & Currency Filters Row */}
               <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
                 <form onSubmit={handleApplyFilter} className="flex flex-wrap items-end gap-4">
-                  <div className="flex-1 min-w-[200px]">
+                  <div className="flex-1 min-w-[180px]">
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">Дата с</label>
                     <div className="relative">
                       <Calendar className="absolute inset-y-0 left-0 pl-3.5 h-full w-5 text-gray-400 pointer-events-none" />
@@ -388,7 +436,7 @@ export default function AdminFinancePage() {
                     </div>
                   </div>
 
-                  <div className="flex-1 min-w-[200px]">
+                  <div className="flex-1 min-w-[180px]">
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">Дата по</label>
                     <div className="relative">
                       <Calendar className="absolute inset-y-0 left-0 pl-3.5 h-full w-5 text-gray-400 pointer-events-none" />
@@ -398,6 +446,23 @@ export default function AdminFinancePage() {
                         onChange={(e) => setEndDate(e.target.value)}
                         className="block w-full pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:bg-white"
                       />
+                    </div>
+                  </div>
+
+                  <div className="w-48">
+                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wide">Валюта графиков</label>
+                    <div className="relative">
+                      <Coins className="absolute inset-y-0 left-0 pl-3.5 h-full w-5 text-gray-400 pointer-events-none" />
+                      <select 
+                        value={analyticsCurrency}
+                        onChange={(e) => setAnalyticsCurrency(e.target.value)}
+                        className="block w-full pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:bg-white appearance-none cursor-pointer font-bold"
+                      >
+                        <option value="KZT">KZT (₸)</option>
+                        <option value="RUB">RUB (₽)</option>
+                        <option value="USD">USD ($)</option>
+                        <option value="EUR">EUR (€)</option>
+                      </select>
                     </div>
                   </div>
 
@@ -413,10 +478,12 @@ export default function AdminFinancePage() {
               {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Потрачено в выбранный период</h3>
-                    <p className="text-4xl font-black text-gray-900 tracking-tight mt-1">{formatCurrency(totalSpent)}</p>
-                    <p className="text-xs text-gray-500 mt-2">Всего {expenses.length} записей</p>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Потрачено в выбранный период (Все валюты)</h3>
+                    <p className="text-2xl font-black text-gray-900 tracking-tight break-words pr-2">
+                      {getGroupedSumsText(expenses)}
+                    </p>
+                    <p className="text-xs text-gray-500">Всего {expenses.length} записей</p>
                   </div>
                   <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shrink-0">
                     <TrendingUp className="w-7 h-7" />
@@ -424,10 +491,12 @@ export default function AdminFinancePage() {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Потрачено за сегодня</h3>
-                    <p className="text-4xl font-black text-emerald-600 tracking-tight mt-1">{formatCurrency(todaySpent)}</p>
-                    <p className="text-xs text-gray-500 mt-2">({todayStr})</p>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wide">Потрачено за сегодня (Все валюты)</h3>
+                    <p className="text-2xl font-black text-emerald-600 tracking-tight break-words pr-2">
+                      {getGroupedSumsText(todayExpenses)}
+                    </p>
+                    <p className="text-xs text-gray-500">({todayStr})</p>
                   </div>
                   <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0">
                     <Wallet className="w-7 h-7" />
@@ -435,59 +504,125 @@ export default function AdminFinancePage() {
                 </div>
               </div>
 
-              {/* Category & Counterparty Distributions */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Consolidated Report Row (Employee, Articles, counterparties) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* Articles Breakdown */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-base font-bold text-gray-950 flex items-center mb-4">
-                    <Layers className="w-5 h-5 mr-2 text-gray-400" /> Распределение по статьям
-                  </h3>
+                {/* Employee Breakdown (Consolidated Report) */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-base font-bold text-gray-950 flex items-center">
+                        <UserCheck className="w-5 h-5 mr-2 text-gray-400" /> Отчет по сотрудникам
+                      </h3>
+                      <span className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
+                        {analyticsCurrency}
+                      </span>
+                    </div>
 
-                  {articleBreakdown.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-6">Нет данных о статьях расходов</p>
-                  ) : (
-                    <div className="space-y-4">
-                      {articleBreakdown.map((item) => (
-                        <div key={item.id} className="space-y-1">
-                          <div className="flex justify-between text-sm font-medium">
-                            <span className="text-gray-700 truncate max-w-[200px]">{item.name}</span>
-                            <span className="text-gray-900 font-bold">
-                              {formatCurrency(item.spent)} <span className="text-xs text-gray-400 font-normal">({item.percentage}%)</span>
-                            </span>
+                    {employeeBreakdown.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-6">Нет трат в валюте {analyticsCurrency}</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {employeeBreakdown.map((item) => (
+                          <div key={item.id} className="space-y-1">
+                            <div className="flex justify-between text-sm font-medium">
+                              <span className="text-gray-700 truncate max-w-[150px] font-semibold">{item.name}</span>
+                              <span className="text-gray-950 font-bold">
+                                {formatCurrency(item.spent, analyticsCurrency)} <span className="text-xs text-gray-400 font-normal">({item.percentage}%)</span>
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                              <div className="bg-primary h-full rounded-full" style={{ width: `${item.percentage}%` }} />
+                            </div>
                           </div>
-                          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                            <div className="bg-primary h-full rounded-full" style={{ width: `${item.percentage}%` }} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {employeeBreakdown.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-gray-50 flex justify-between text-xs text-gray-500">
+                      <span>Итого по {analyticsCurrency}:</span>
+                      <span className="font-bold text-gray-900">{formatCurrency(totalSpentFiltered, analyticsCurrency)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Articles Breakdown */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-base font-bold text-gray-950 flex items-center">
+                        <Layers className="w-5 h-5 mr-2 text-gray-400" /> Распределение по статьям
+                      </h3>
+                      <span className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
+                        {analyticsCurrency}
+                      </span>
+                    </div>
+
+                    {articleBreakdown.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-6">Нет трат в валюте {analyticsCurrency}</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {articleBreakdown.map((item) => (
+                          <div key={item.id} className="space-y-1">
+                            <div className="flex justify-between text-sm font-medium">
+                              <span className="text-gray-700 truncate max-w-[150px]">{item.name}</span>
+                              <span className="text-gray-950 font-bold">
+                                {formatCurrency(item.spent, analyticsCurrency)} <span className="text-xs text-gray-400 font-normal">({item.percentage}%)</span>
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                              <div className="bg-[#10B981] h-full rounded-full" style={{ width: `${item.percentage}%` }} />
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {articleBreakdown.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-gray-50 flex justify-between text-xs text-gray-500">
+                      <span>Распределено статей:</span>
+                      <span className="font-bold text-gray-950">{articleBreakdown.length}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Counterparties Breakdown */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-base font-bold text-gray-950 flex items-center mb-4">
-                    <Users className="w-5 h-5 mr-2 text-gray-400" /> Распределение по контрагентам
-                  </h3>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-base font-bold text-gray-950 flex items-center">
+                        <Users className="w-5 h-5 mr-2 text-gray-400" /> Траты по контрагентам
+                      </h3>
+                      <span className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
+                        {analyticsCurrency}
+                      </span>
+                    </div>
 
-                  {counterpartyBreakdown.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-6">Нет данных о контрагентах</p>
-                  ) : (
-                    <div className="space-y-4">
-                      {counterpartyBreakdown.map((item) => (
-                        <div key={item.id} className="space-y-1">
-                          <div className="flex justify-between text-sm font-medium">
-                            <span className="text-gray-700 truncate max-w-[200px]">{item.name}</span>
-                            <span className="text-gray-900 font-bold">
-                              {formatCurrency(item.spent)} <span className="text-xs text-gray-400 font-normal">({item.percentage}%)</span>
-                            </span>
+                    {counterpartyBreakdown.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-6">Нет трат в валюте {analyticsCurrency}</p>
+                    ) : (
+                      <div className="space-y-4">
+                        {counterpartyBreakdown.map((item) => (
+                          <div key={item.id} className="space-y-1">
+                            <div className="flex justify-between text-sm font-medium">
+                              <span className="text-gray-700 truncate max-w-[150px]">{item.name}</span>
+                              <span className="text-gray-950 font-bold">
+                                {formatCurrency(item.spent, analyticsCurrency)} <span className="text-xs text-gray-400 font-normal">({item.percentage}%)</span>
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                              <div className="bg-orange-400 h-full rounded-full" style={{ width: `${item.percentage}%` }} />
+                            </div>
                           </div>
-                          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                            <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${item.percentage}%` }} />
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {counterpartyBreakdown.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-gray-50 flex justify-between text-xs text-gray-500">
+                      <span>Контрагентов с тратами:</span>
+                      <span className="font-bold text-gray-950">{counterpartyBreakdown.length}</span>
                     </div>
                   )}
                 </div>
@@ -496,14 +631,14 @@ export default function AdminFinancePage() {
               {/* Journal Table List */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <h3 className="text-base font-bold text-gray-950">Журнал расходов</h3>
+                  <h3 className="text-base font-bold text-gray-950">Общий журнал расходов (все сотрудники)</h3>
                   
                   {/* Search Bar */}
                   <div className="relative w-full sm:w-64">
                     <Search className="absolute inset-y-0 left-3 h-full w-4 text-gray-400 pointer-events-none" />
                     <input
                       type="text"
-                      placeholder="Поиск по журналу..."
+                      placeholder="Поиск (сотрудник, статья, сумма)..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="block w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:bg-white"
@@ -522,6 +657,7 @@ export default function AdminFinancePage() {
                         <tr>
                           <th className="px-6 py-3">Дата</th>
                           <th className="px-6 py-3">Сотрудник</th>
+                          <th className="px-6 py-3">Валюта</th>
                           <th className="px-6 py-3">Статья расходов</th>
                           <th className="px-6 py-3">Контрагент</th>
                           <th className="px-6 py-3">Комментарий</th>
@@ -534,6 +670,11 @@ export default function AdminFinancePage() {
                           <tr key={exp.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap font-medium">{exp.expense_date}</td>
                             <td className="px-6 py-4 whitespace-nowrap font-semibold text-gray-900">{exp.profile?.full_name || "Удален"}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded font-bold text-[10px]">
+                                {exp.currency || "KZT"}
+                              </span>
+                            </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               {exp.article ? (
                                 <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-md font-medium text-xs">
@@ -556,11 +697,11 @@ export default function AdminFinancePage() {
                               {exp.description || <span className="text-gray-300">—</span>}
                             </td>
                             <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-gray-950">
-                              {formatCurrency(parseFloat(exp.amount))}
+                              {formatCurrency(parseFloat(exp.amount), exp.currency)}
                             </td>
                             <td className="px-6 py-4 text-center whitespace-nowrap">
                               <button
-                                onClick={() => handleDeleteExpense(exp.id, parseFloat(exp.amount), exp.profile?.full_name || "Сотрудник")}
+                                onClick={() => handleDeleteExpense(exp.id, parseFloat(exp.amount), exp.currency, exp.profile?.full_name || "Сотрудник")}
                                 className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg active:scale-90 transition-all"
                                 title="Удалить запись"
                               >

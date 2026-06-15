@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS public.finance_expenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     employee_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     amount NUMERIC NOT NULL CHECK (amount > 0),
+    currency TEXT NOT NULL DEFAULT 'KZT',
     article_id UUID REFERENCES public.finance_articles(id) ON DELETE SET NULL,
     counterparty_id UUID REFERENCES public.finance_counterparties(id) ON DELETE SET NULL,
     description TEXT,

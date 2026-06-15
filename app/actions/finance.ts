@@ -50,6 +50,7 @@ export async function getFinanceDirectories() {
 // 2. Добавить расход
 export async function addExpense(
   amount: number,
+  currency: string,
   articleId: string | null,
   counterpartyId: string | null,
   description: string,
@@ -68,6 +69,7 @@ export async function addExpense(
       .insert({
         employee_id: user.id,
         amount,
+        currency: currency || "KZT",
         article_id: articleId || null,
         counterparty_id: counterpartyId || null,
         description: description || null,
