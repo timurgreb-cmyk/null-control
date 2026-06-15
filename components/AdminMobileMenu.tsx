@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Clock, MapPin, Menu, X, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Clock, MapPin, Menu, X, LogOut, Wallet } from "lucide-react";
 
 import { logout } from "@/app/actions/auth";
 
@@ -17,6 +17,7 @@ export default function AdminMobileMenu({ adminName }: { adminName: string }) {
     { name: "Журнал", href: "/admin/attendance", icon: Clock },
     { name: "Табель", href: "/admin/timesheet", icon: Clock },
     { name: "Выработка", href: "/admin/production", icon: LayoutDashboard },
+    { name: "Финансы", href: "/admin/finance", icon: Wallet },
     { name: "Локации", href: "/admin/locations", icon: MapPin },
   ];
 
