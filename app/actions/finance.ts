@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentProfile } from "./auth";
 import { revalidatePath } from "next/cache";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Helper to assert admin privileges
 async function assertAdmin() {
@@ -154,7 +155,7 @@ export async function getAdminExpenses(startDate?: string, endDate?: string) {
       .from("finance_expenses")
       .select(`
         *,
-        profile:profiles(id, name),
+        profile:profiles(id, full_name),
         article:finance_articles(id, name),
         counterparty:finance_counterparties(id, name)
       `)
@@ -310,5 +311,130 @@ export async function deleteFinanceCounterparty(id: string) {
   } catch (error: any) {
     console.error("Error in deleteFinanceCounterparty:", error);
     return { error: error.message || "Не удалось удалить контрагента" };
+  }
+}
+
+// 11. Голосовой ввод расхода: Парсинг речи сотрудника с помощью Gemini AI
+export async function parseVoiceExpense(voiceText: string) {
+  try {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Требуется авторизация.");
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return { error: "API ключ Gemini не настроен в файле .env.local" };
+    }
+
+    // 1. Получаем списки существующих справочников для сопоставления
+    const [articlesRes, counterpartiesRes] = await Promise.all([
+      supabase.from("finance_articles").select("id, name"),
+      supabase.from("finance_counterparties").select("id, name")
+    ]);
+
+    const articlesList = (articlesRes.data || [])
+      .map(a => `- ${a.name} (ID: ${a.id})`)
+      .join("\n");
+      
+    const counterpartiesList = (counterpartiesRes.data || [])
+      .map(c => `- ${c.name} (ID: ${c.id})`)
+      .join("\n");
+
+    const todayDateStr = new Date().toISOString().split("T")[0];
+
+    const prompt = `Ты — финансовый ассистент, который разбирает расшифрованный голосовой ввод сотрудника о расходах предприятия и преобразует его в структурированные JSON-данные.
+Твоя задача — извлечь сумму, валюту, сопоставить с существующим справочником статей расходов и контрагентов, определить дату и примечание.
+
+СПРАВОЧНИК СТАТЕЙ РАСХОДОВ:
+${articlesList || "(нет созданных статей)"}
+
+СПРАВОЧНИК КОНТРАГЕНТОВ:
+${counterpartiesList || "(нет созданных контрагентов)"}
+
+Текущая дата (для контекста "вчера", "сегодня", "позавчера" и т.д.): ${todayDateStr}
+
+Ввод сотрудника: "${voiceText}"
+
+ПРАВИЛА:
+1. "amount": извлеки числовую сумму (например: "десять тысяч" -> 10000, "две с половиной тысячи" -> 2500).
+2. "currency": извлеки код валюты. Варианты: KZT (если упоминается тенге, ₸), RUB (если упоминается рубль, ₽), USD (доллар, $), EUR (евро, €). Если валюта не упомянута вообще, по умолчанию верни "KZT".
+3. "article_id": сопоставь описание расходов с одной из статей расходов из справочника выше. Верни UUID найденной статьи. Если совпадений нет или затрудняешься, верни null.
+4. "counterparty_id": сопоставь получателя платежа с контрагентом из справочника выше. Верни UUID найденного контрагента. Если совпадений нет, верни null.
+5. "description": добавь любые важные детали, которые сотрудник проговорил (например: "покупка муки 5 мешков", "оплата интернета за май"). Описание должно быть кратким, на русском языке, без лишней "воды".
+6. "expense_date": определи дату расхода в формате YYYY-MM-DD. Если сказано "сегодня" или дата не указана, используй ${todayDateStr}. Если сказано "вчера", вычти 1 день. Если указана конкретная дата (например, "десятого июня"), подставь правильный год и месяц.
+
+Верни СТРОГО JSON-объект без markdown-разметки (без \`\`\`json) и без лишнего текста.
+Формат:
+{
+  "amount": число,
+  "currency": "KZT"|"RUB"|"USD"|"EUR",
+  "article_id": "UUID_ИЛИ_null",
+  "counterparty_id": "UUID_ИЛИ_null",
+  "description": "строка_или_null",
+  "expense_date": "YYYY-MM-DD"
+}`;
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    let result;
+    const modelsToTry = [
+      "gemini-2.5-flash", 
+      "gemini-3.5-flash", 
+      "gemini-3.1-pro", 
+      "gemini-2.5-pro", 
+      "gemini-2.5-flash-lite"
+    ];
+    let lastError = null;
+
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const modelName = modelsToTry[i];
+      try {
+        console.log(`Attempting Gemini model for voice parsing: ${modelName}`);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        result = await model.generateContent(prompt);
+        if (result) break;
+      } catch (err: any) {
+        console.warn(`Model ${modelName} failed for voice parsing:`, err?.message || err);
+        lastError = err;
+
+        const errMsg = String(err?.message || err);
+        if (errMsg.includes("403 Forbidden") || errMsg.includes("denied access") || errMsg.includes("Forbidden")) {
+          return { 
+            error: "Ваш API-ключ или проект Google AI Studio заблокирован (403 Forbidden). Пожалуйста, обновите переменную GEMINI_API_KEY."
+          };
+        }
+        
+        if (i === 0) {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            const model = genAI.getGenerativeModel({ model: modelName });
+            result = await model.generateContent(prompt);
+            if (result) break;
+          } catch (retryErr: any) {
+            console.warn(`Retry of ${modelName} failed:`, retryErr?.message || retryErr);
+            lastError = retryErr;
+          }
+        }
+      }
+    }
+
+    if (!result) {
+      throw lastError || new Error("Все доступные ИИ-модели вернули ошибку.");
+    }
+
+    const responseText = result.response.text();
+    let parsedData: any = {};
+    
+    try {
+      const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      parsedData = JSON.parse(cleanText);
+    } catch (e) {
+      console.error("Failed to parse JSON from Gemini for voice expense:", responseText);
+      return { error: "ИИ не смог распознать структуру расходов. Пожалуйста, проговорите четче." };
+    }
+
+    return { success: true, data: parsedData };
+  } catch (error: any) {
+    console.error("Error in parseVoiceExpense server action:", error);
+    return { error: error.message || "Ошибка при распознавании голоса ИИ" };
   }
 }

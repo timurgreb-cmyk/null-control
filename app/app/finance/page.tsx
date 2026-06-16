@@ -18,7 +18,8 @@ import {
   User,
   AlertCircle,
   CheckCircle2,
-  Coins
+  Coins,
+  Mic
 } from "lucide-react";
 
 export default function FinancePage() {
@@ -43,6 +44,13 @@ export default function FinancePage() {
     const dd = String(today.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   });
+
+  // Voice Recognition States
+  const [isListening, setIsListening] = useState(false);
+  const [aiProcessing, setAiProcessing] = useState(false);
+  const [voiceText, setVoiceText] = useState("");
+  const [recognition, setRecognition] = useState<any>(null);
+  const [highlightedFields, setHighlightedFields] = useState<Record<string, boolean>>({});
 
   // Message notifications
   const [notification, setNotification] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -86,6 +94,123 @@ export default function FinancePage() {
 
     init();
   }, []);
+
+  // Initialize Web Speech Recognition
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const rec = new SpeechRecognition();
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.lang = "ru-RU";
+
+        rec.onstart = () => {
+          setIsListening(true);
+          setVoiceText("");
+        };
+
+        rec.onresult = (event: any) => {
+          const text = event.results[0][0].transcript;
+          setVoiceText(text);
+          handleProcessVoiceText(text);
+        };
+
+        rec.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsListening(false);
+          if (event.error !== "no-speech") {
+            showNotification("error", "Ошибка распознавания речи: " + event.error);
+          }
+        };
+
+        rec.onend = () => {
+          setIsListening(false);
+        };
+
+        setRecognition(rec);
+      }
+    }
+  }, [articles, counterparties]);
+
+  const toggleListening = () => {
+    if (!recognition) {
+      alert("Голосовой ввод не поддерживается вашим браузером или устройством.");
+      return;
+    }
+
+    if (isListening) {
+      recognition.stop();
+    } else {
+      try {
+        recognition.start();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const handleProcessVoiceText = async (text: string) => {
+    if (!text.trim()) return;
+    setAiProcessing(true);
+    showNotification("success", "Голос распознан. ИИ обрабатывает текст...");
+
+    try {
+      const { parseVoiceExpense } = await import("@/app/actions/finance");
+      const res = await parseVoiceExpense(text);
+
+      if ("error" in res) {
+        showNotification("error", res.error);
+      } else if (res.success && res.data) {
+        const data = res.data;
+        const highlights: Record<string, boolean> = {};
+
+        if (data.amount && parseFloat(data.amount) > 0) {
+          setAmount(data.amount.toString());
+          highlights.amount = true;
+        }
+        if (data.currency) {
+          setCurrency(data.currency);
+          highlights.currency = true;
+        }
+        if (data.article_id) {
+          setArticleId(data.article_id);
+          highlights.article = true;
+        } else {
+          setArticleId("");
+        }
+        if (data.counterparty_id) {
+          setCounterpartyId(data.counterparty_id);
+          highlights.counterparty = true;
+        } else {
+          setCounterpartyId("");
+        }
+        if (data.description) {
+          setDescription(data.description);
+          highlights.description = true;
+        } else {
+          setDescription("");
+        }
+        if (data.expense_date) {
+          setExpenseDate(data.expense_date);
+          highlights.date = true;
+        }
+
+        setHighlightedFields(highlights);
+        showNotification("success", "ИИ успешно заполнил форму! Проверьте поля.");
+
+        // Remove highlights after 4 seconds
+        setTimeout(() => {
+          setHighlightedFields({});
+        }, 4000);
+      }
+    } catch (err: any) {
+      console.error(err);
+      showNotification("error", err.message || "Ошибка ИИ-обработки голосового ввода.");
+    } finally {
+      setAiProcessing(false);
+    }
+  };
 
   const refreshExpenses = async () => {
     setLoadingExpenses(true);
@@ -191,6 +316,13 @@ export default function FinancePage() {
     ? Object.entries(dailySums).map(([curr, val]) => formatCurrency(val, curr)).join(" + ")
     : formatCurrency(0, "KZT");
 
+  // CSS highlighter
+  const highlightClass = (field: string) => {
+    return highlightedFields[field] 
+      ? "ring-2 ring-amber-400 bg-amber-50/50 border-amber-300 transition-all duration-1000 scale-[1.01]" 
+      : "transition-all duration-1000";
+  };
+
   if (loading) {
     return (
       <div className="p-4 pt-8 space-y-6">
@@ -242,16 +374,74 @@ export default function FinancePage() {
 
       {/* Add Expense Form */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        <h2 className="text-base font-bold text-gray-900 mb-4">Внести расход</h2>
+        
+        {/* Form Title & Voice Button */}
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-base font-bold text-gray-900">Внести расход</h2>
+          
+          <button
+            type="button"
+            onClick={toggleListening}
+            disabled={aiProcessing}
+            className={`px-3 py-1.5 rounded-xl border flex items-center justify-center transition-all active:scale-95 text-xs font-bold ${
+              isListening 
+                ? "bg-rose-500 border-rose-600 text-white shadow-lg shadow-rose-200" 
+                : aiProcessing 
+                  ? "bg-amber-100 border-amber-200 text-amber-700" 
+                  : "bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100"
+            }`}
+            title="Голосовой ввод ИИ"
+          >
+            {aiProcessing ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ИИ обрабатывает...
+              </>
+            ) : isListening ? (
+              <>
+                <span className="relative flex h-2 w-2 mr-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                </span>
+                Слушаю речь...
+              </>
+            ) : (
+              <>
+                <Mic className="w-3.5 h-3.5 mr-1.5 stroke-[2.5px]" />
+                Голосовой ввод ИИ
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Listening Banners */}
+        {isListening && (
+          <div className="mb-4 p-3.5 bg-rose-50 border border-rose-100 rounded-2xl text-center">
+            <p className="text-xs text-rose-800 font-bold animate-pulse">
+              Говорите четко: сумму, валюту (рубли/тенге/доллары), статью, контрагента и дату.
+            </p>
+            <p className="text-[10px] text-rose-500 mt-1.5 italic">
+              Например: «Запиши вчера логистику на пять тысяч тенге контрагенту ИП Иванов»
+            </p>
+          </div>
+        )}
+
+        {voiceText && !aiProcessing && (
+          <div className="mb-4 p-3 bg-gray-50 border border-gray-100 rounded-2xl">
+            <p className="text-[9px] text-gray-400 uppercase font-black tracking-wider mb-1">Распознано:</p>
+            <p className="text-xs text-gray-700 italic font-medium leading-relaxed">&ldquo;{voiceText}&rdquo;</p>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           
           {/* Amount and Currency Field */}
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Сумма *</label>
+          <div className={`p-1.5 rounded-2xl ${highlightClass("amount") || highlightClass("currency")}`}>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider pl-1">Сумма *</label>
             <div className="flex space-x-2">
-              <div className="relative rounded-2xl shadow-sm flex-1">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Coins className="h-5 w-5 text-gray-400" />
+              <div className="relative rounded-xl shadow-sm flex-1">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <Coins className="h-4 w-4 text-gray-400" />
                 </div>
                 <input
                   type="number"
@@ -261,7 +451,7 @@ export default function FinancePage() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="block w-full pl-11 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 font-bold placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-lg"
+                  className="block w-full pl-10 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-xl text-gray-900 font-bold placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-lg"
                 />
               </div>
 
@@ -269,7 +459,7 @@ export default function FinancePage() {
                 <select
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
-                  className="block w-full px-3 py-3.5 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm cursor-pointer"
+                  className="block w-full px-3 py-3.5 bg-[#F9FAFB] border border-gray-200 rounded-xl text-gray-900 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm cursor-pointer"
                 >
                   <option value="KZT">KZT (₸)</option>
                   <option value="RUB">RUB (₽)</option>
@@ -281,29 +471,29 @@ export default function FinancePage() {
           </div>
 
           {/* Date Field */}
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Дата расхода</label>
-            <div className="relative rounded-2xl shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Calendar className="h-5 w-5 text-gray-400" />
+          <div className={`p-1.5 rounded-2xl ${highlightClass("date")}`}>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider pl-1">Дата расхода</label>
+            <div className="relative rounded-xl shadow-sm">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Calendar className="h-4 w-4 text-gray-400" />
               </div>
               <input
                 type="date"
                 required
                 value={expenseDate}
                 onChange={(e) => setExpenseDate(e.target.value)}
-                className="block w-full pl-11 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm"
+                className="block w-full pl-10 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-xl text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm"
               />
             </div>
           </div>
 
           {/* Article Selector */}
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Статья расходов</label>
+          <div className={`p-1.5 rounded-2xl ${highlightClass("article")}`}>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider pl-1">Статья расходов</label>
             <select
               value={articleId}
               onChange={(e) => setArticleId(e.target.value)}
-              className="block w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm appearance-none cursor-pointer"
+              className="block w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-xl text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm cursor-pointer"
             >
               <option value="">Выберите статью...</option>
               {articles.map((art) => (
@@ -313,12 +503,12 @@ export default function FinancePage() {
           </div>
 
           {/* Counterparty Selector */}
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Контрагент</label>
+          <div className={`p-1.5 rounded-2xl ${highlightClass("counterparty")}`}>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider pl-1">Контрагент</label>
             <select
               value={counterpartyId}
               onChange={(e) => setCounterpartyId(e.target.value)}
-              className="block w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm appearance-none cursor-pointer"
+              className="block w-full px-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-xl text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm cursor-pointer"
             >
               <option value="">Выберите контрагента...</option>
               {counterparties.map((cp) => (
@@ -328,18 +518,18 @@ export default function FinancePage() {
           </div>
 
           {/* Description Field */}
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Комментарий / Детали</label>
-            <div className="relative rounded-2xl shadow-sm">
-              <div className="absolute top-3 left-4 pointer-events-none">
-                <FileText className="h-5 w-5 text-gray-400" />
+          <div className={`p-1.5 rounded-2xl ${highlightClass("description")}`}>
+            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider pl-1">Комментарий / Детали</label>
+            <div className="relative rounded-xl shadow-sm">
+              <div className="absolute top-3.5 left-3.5 pointer-events-none">
+                <FileText className="h-4 w-4 text-gray-400" />
               </div>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Например: Закуп муки в мешках..."
+                placeholder="Например: Оплата материалов для цеха..."
                 rows={2}
-                className="block w-full pl-11 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm resize-none"
+                className="block w-full pl-10 pr-4 py-3 bg-[#F9FAFB] border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm resize-none"
               />
             </div>
           </div>
@@ -347,7 +537,7 @@ export default function FinancePage() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || isListening}
             className="w-full flex items-center justify-center px-4 py-3.5 bg-emerald-600 active:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-2xl font-bold shadow-md shadow-emerald-600/10 active:scale-[0.98] transition-all"
           >
             {submitting ? (
