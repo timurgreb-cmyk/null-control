@@ -372,66 +372,75 @@ export default function FinancePage() {
         </div>
       )}
 
+      {/* AI Voice Assistant Card (LARGE mic button dashboard) */}
+      <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl shadow-md p-5 flex flex-col items-center relative overflow-hidden">
+        {/* Background decorative blobs */}
+        <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
+        <div className="absolute -left-6 -top-6 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
+
+        <div className="flex flex-col items-center text-center space-y-4 w-full">
+          <div className="flex items-center space-x-2">
+            <span className="text-[10px] uppercase tracking-wider font-extrabold bg-white/20 px-2.5 py-1 rounded-full">
+              ИИ Ассистент
+            </span>
+          </div>
+
+          <p className="text-xs text-emerald-100 font-medium max-w-xs leading-relaxed">
+            Нажмите кнопку ниже и назовите сумму, валюту, статью, контрагента и дату.
+          </p>
+
+          {/* Centered Large Circular Pulse Mic Button */}
+          <div className="relative flex items-center justify-center py-2">
+            {isListening && (
+              <span className="absolute inline-flex h-20 w-20 rounded-full bg-rose-400/30 animate-ping" />
+            )}
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={aiProcessing}
+              className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all z-10 ${
+                isListening
+                  ? "bg-rose-500 hover:bg-rose-600 text-white shadow-rose-900/30"
+                  : aiProcessing
+                    ? "bg-amber-400 text-amber-950"
+                    : "bg-white text-emerald-700 hover:bg-emerald-50 hover:scale-105"
+              }`}
+            >
+              {aiProcessing ? (
+                <Loader2 className="w-7 h-7 animate-spin" />
+              ) : (
+                <Mic className={`w-7 h-7 ${isListening ? "animate-pulse" : ""}`} />
+              )}
+            </button>
+          </div>
+
+          <span className="text-xs font-bold tracking-wide">
+            {isListening 
+              ? "Слушаю вас... Говорите" 
+              : aiProcessing 
+                ? "ИИ обрабатывает вашу речь..." 
+                : "Продиктовать расход голосом"}
+          </span>
+
+          {isListening && (
+            <p className="text-[10px] text-rose-200 italic animate-pulse">
+              «Вчера оплатили аренду 120 000 тенге контрагенту ИП Иванову»
+            </p>
+          )}
+
+          {/* Live transcript log */}
+          {voiceText && (
+            <div className="w-full bg-black/15 border border-white/10 rounded-xl p-3 text-left mt-2 transition-all">
+              <span className="text-[9px] uppercase tracking-wider text-emerald-300 font-bold block mb-1">Распознано:</span>
+              <p className="text-xs text-white italic font-medium leading-relaxed">&ldquo;{voiceText}&rdquo;</p>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Add Expense Form */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-        
-        {/* Form Title & Voice Button */}
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-base font-bold text-gray-900">Внести расход</h2>
-          
-          <button
-            type="button"
-            onClick={toggleListening}
-            disabled={aiProcessing}
-            className={`px-3 py-1.5 rounded-xl border flex items-center justify-center transition-all active:scale-95 text-xs font-bold ${
-              isListening 
-                ? "bg-rose-500 border-rose-600 text-white shadow-lg shadow-rose-200" 
-                : aiProcessing 
-                  ? "bg-amber-100 border-amber-200 text-amber-700" 
-                  : "bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100"
-            }`}
-            title="Голосовой ввод ИИ"
-          >
-            {aiProcessing ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                ИИ обрабатывает...
-              </>
-            ) : isListening ? (
-              <>
-                <span className="relative flex h-2 w-2 mr-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-                </span>
-                Слушаю речь...
-              </>
-            ) : (
-              <>
-                <Mic className="w-3.5 h-3.5 mr-1.5 stroke-[2.5px]" />
-                Голосовой ввод ИИ
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Listening Banners */}
-        {isListening && (
-          <div className="mb-4 p-3.5 bg-rose-50 border border-rose-100 rounded-2xl text-center">
-            <p className="text-xs text-rose-800 font-bold animate-pulse">
-              Говорите четко: сумму, валюту (рубли/тенге/доллары), статью, контрагента и дату.
-            </p>
-            <p className="text-[10px] text-rose-500 mt-1.5 italic">
-              Например: «Запиши вчера логистику на пять тысяч тенге контрагенту ИП Иванов»
-            </p>
-          </div>
-        )}
-
-        {voiceText && !aiProcessing && (
-          <div className="mb-4 p-3 bg-gray-50 border border-gray-100 rounded-2xl">
-            <p className="text-[9px] text-gray-400 uppercase font-black tracking-wider mb-1">Распознано:</p>
-            <p className="text-xs text-gray-700 italic font-medium leading-relaxed">&ldquo;{voiceText}&rdquo;</p>
-          </div>
-        )}
+        <h2 className="text-base font-bold text-gray-900 mb-4">Внести расход вручную</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           
