@@ -1,6 +1,6 @@
 "use client";
 
-import { ScanLine, UserCircle, Briefcase, Wallet } from "lucide-react";
+import { ScanLine, UserCircle, Briefcase, Wallet, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -42,6 +42,19 @@ export default function EmployeeLayout({
       }
     }
   }, [profile, pathname, isFinanceUser, router]);
+
+  const isWrongPage = (isFinanceUser && (pathname === "/app/scan" || pathname === "/app/production")) ||
+                      (!isFinanceUser && pathname === "/app/finance");
+
+  // While profile is loading or when redirecting, show a full-screen loading screen
+  if (!profile || isWrongPage) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#F3F4F6]">
+        <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+        <span className="text-sm text-gray-500 font-medium">Загрузка...</span>
+      </div>
+    );
+  }
 
   const tabs = [];
 

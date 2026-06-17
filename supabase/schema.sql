@@ -57,25 +57,27 @@ CREATE POLICY "Locations are updatable by admin" ON public.locations
         EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
--- 2. Profiles: чтение своего профиля, или всех если admin
+-- 2. Profiles: чтение своего профиля, или всех если admin (с защитой от рекурсии)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view their own profile" ON public.profiles
-    FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Admin can view all profiles" ON public.profiles;
 
-CREATE POLICY "Admin can view all profiles" ON public.profiles
+CREATE POLICY "Profiles select policy" ON public.profiles
     FOR SELECT USING (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        auth.uid() = id 
+        OR 
+        (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
     );
 
 CREATE POLICY "Admin can update all profiles" ON public.profiles
     FOR UPDATE USING (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
     );
 
 CREATE POLICY "Admin can insert profiles" ON public.profiles
     FOR INSERT WITH CHECK (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
     );
 
 -- 3. Time Records: чтение/запись своих записей, или всех если admin

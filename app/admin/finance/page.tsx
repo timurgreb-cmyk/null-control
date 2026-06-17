@@ -346,7 +346,7 @@ export default function AdminFinancePage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Финансовый учет</h1>
           <p className="text-gray-500 mt-1">
-            Контроль расходов предприятия, мультивалютные отчеты трех сотрудников (Альфия, Эльмира, Тимур).
+            Контроль расходов предприятия, мультивалютные отчеты и статистика.
           </p>
         </div>
         <button 
