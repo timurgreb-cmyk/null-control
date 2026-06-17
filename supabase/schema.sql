@@ -1,3 +1,14 @@
+-- Функция для безопасной проверки роли без рекурсии в RLS политиках
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN COALESCE(
+    (SELECT role = 'admin' FROM public.profiles WHERE id = auth.uid()),
+    false
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Таблица локаций (Locations)
 CREATE TABLE public.locations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,12 +60,12 @@ CREATE POLICY "Locations are viewable by everyone" ON public.locations
 
 CREATE POLICY "Locations are insertable by admin" ON public.locations
     FOR INSERT WITH CHECK (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        public.is_admin()
     );
 
 CREATE POLICY "Locations are updatable by admin" ON public.locations
     FOR UPDATE USING (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        public.is_admin()
     );
 
 -- 2. Profiles: чтение своего профиля, или всех если admin (с защитой от рекурсии)
@@ -67,17 +78,17 @@ CREATE POLICY "Profiles select policy" ON public.profiles
     FOR SELECT USING (
         auth.uid() = id 
         OR 
-        (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+        public.is_admin()
     );
 
 CREATE POLICY "Admin can update all profiles" ON public.profiles
     FOR UPDATE USING (
-        (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+        public.is_admin()
     );
 
 CREATE POLICY "Admin can insert profiles" ON public.profiles
     FOR INSERT WITH CHECK (
-        (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin'
+        public.is_admin()
     );
 
 -- 3. Time Records: чтение/запись своих записей, или всех если admin
@@ -91,12 +102,12 @@ CREATE POLICY "Users can insert their own time records" ON public.time_records
 
 CREATE POLICY "Admin can view all time records" ON public.time_records
     FOR SELECT USING (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        public.is_admin()
     );
 
 CREATE POLICY "Admin can update/delete all time records" ON public.time_records
     FOR ALL USING (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        public.is_admin()
     );
 
 -- 4. Shifts
@@ -107,7 +118,7 @@ CREATE POLICY "Users can view their own shifts" ON public.shifts
 
 CREATE POLICY "Admin can manage all shifts" ON public.shifts
     FOR ALL USING (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        public.is_admin()
     );
 
 -- Функция для автоматического создания профиля (опционально, если admin создает юзера через auth API)

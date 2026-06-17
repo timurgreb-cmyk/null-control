@@ -45,13 +45,13 @@ DROP POLICY IF EXISTS "Admin can manage all expenses" ON public.finance_expenses
 CREATE POLICY "Articles viewable by authenticated" ON public.finance_articles 
     FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Articles manageable by admin" ON public.finance_articles 
-    FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+    FOR ALL USING (public.is_admin());
 
 -- Политики для контрагентов
 CREATE POLICY "Counterparties viewable by authenticated" ON public.finance_counterparties 
     FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Counterparties manageable by admin" ON public.finance_counterparties 
-    FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+    FOR ALL USING (public.is_admin());
 
 -- Политики для расходов
 CREATE POLICY "Users can view their own expenses" ON public.finance_expenses 
@@ -61,6 +61,6 @@ CREATE POLICY "Users can insert their own expenses" ON public.finance_expenses
 CREATE POLICY "Users can delete their own expenses" ON public.finance_expenses 
     FOR DELETE USING (auth.uid() = employee_id);
 CREATE POLICY "Admin can view all expenses" ON public.finance_expenses 
-    FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+    FOR SELECT USING (public.is_admin());
 CREATE POLICY "Admin can manage all expenses" ON public.finance_expenses 
-    FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+    FOR ALL USING (public.is_admin());
