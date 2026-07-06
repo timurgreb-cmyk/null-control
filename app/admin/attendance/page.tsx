@@ -5,6 +5,16 @@ import DeleteRecordButton from "./DeleteRecordButton";
 import AddRecordModal from "./AddRecordModal";
 import LocalTime from "@/components/LocalTime";
 
+function getAlmatyDateStr(isoString: string): string {
+  const date = new Date(isoString);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Almaty",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -40,14 +50,20 @@ export default async function AttendancePage() {
   const recordsWithErrors = records?.map(record => {
     let isError = false;
     if (record.record_type === "check_in") {
-      const currentDay = record.recorded_at.split('T')[0];
+      const currentDay = getAlmatyDateStr(record.recorded_at);
       const hasCheckout = records.some(r => 
         r.employee_id === record.employee_id && 
         r.record_type === "check_out" && 
-        r.recorded_at.startsWith(currentDay)
+        getAlmatyDateStr(r.recorded_at) === currentDay
       );
       
-      const todayDay = new Date().toISOString().split('T')[0];
+      const todayDay = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Almaty",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(new Date());
+
       if (!hasCheckout && currentDay !== todayDay) {
         isError = true;
       }

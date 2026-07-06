@@ -1,5 +1,15 @@
 "use client";
 
+function getAlmatyTimeStr(isoString: string): string {
+  const date = new Date(isoString);
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Almaty",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 export default function ExportCsvButton({ data, month }: { data: any[], month: string }) {
   const handleExport = () => {
     // Формируем заголовки CSV
@@ -27,8 +37,8 @@ export default function ExportCsvButton({ data, month }: { data: any[], month: s
             `"${emp.full_name}"`,
             day.day,
             day.status === 'complete' ? "Отработано" : day.status === 'in_progress' ? "В процессе" : "Ошибка (нет ухода)",
-            day.firstIn ? day.firstIn.split('T')[1].substring(0, 5) : "—",
-            day.lastOut ? day.lastOut.split('T')[1].substring(0, 5) : "—",
+            day.firstIn ? getAlmatyTimeStr(day.firstIn) : "—",
+            day.lastOut ? getAlmatyTimeStr(day.lastOut) : "—",
             day.actualHours ? day.actualHours.toFixed(1) : "0",
             day.overtime ? day.overtime.toFixed(1) : "0",
             index === 0 ? emp.shift_rate || 0 : "", // Показываем ставку только в первой строке для красоты

@@ -16,11 +16,12 @@ export async function processQRScan(locationId: string, clientTimeIso?: string) 
       return { success: false, error: "Необходима авторизация" };
     }
 
-    // Проверка формата UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(locationId)) {
-      return { success: false, error: "Неверный формат QR-кода" };
+    // Извлекаем UUID из отсканированного текста (он может содержать пробелы, новые строки или URL)
+    const uuidMatch = locationId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    if (!uuidMatch) {
+      return { success: false, error: "Неверный формат QR-кода. UUID не найден." };
     }
+    const cleanLocationId = uuidMatch[0];
 
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +32,7 @@ export async function processQRScan(locationId: string, clientTimeIso?: string) 
     const { data: location, error: locError } = await supabaseAdmin
       .from("locations")
       .select("id, name, is_active")
-      .eq("id", locationId)
+      .eq("id", cleanLocationId)
       .single();
 
     if (locError || !location) {
@@ -51,6 +52,7 @@ export async function processQRScan(locationId: string, clientTimeIso?: string) 
       .select("id, record_type, recorded_at")
       .eq("employee_id", user.id)
       .gte("recorded_at", dayAgo.toISOString())
+      .lte("recorded_at", now.toISOString()) // Исключаем будущие отметки, если они есть
       .order("recorded_at", { ascending: false })
       .limit(1);
 

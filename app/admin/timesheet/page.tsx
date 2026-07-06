@@ -3,6 +3,27 @@ import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format } from 
 import { ru } from "date-fns/locale";
 import ExportCsvButton from "./ExportCsvButton";
 import TimesheetRow from "@/components/admin/TimesheetRow";
+import MonthSelector from "./MonthSelector";
+
+function getAlmatyDateStr(isoString: string): string {
+  const date = new Date(isoString);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Almaty",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
+function getAlmatyFormattedDay(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  
+  const dayMonth = date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }).replace('.', '');
+  const weekday = date.toLocaleDateString("ru-RU", { weekday: "short" });
+  
+  return `${dayMonth} (${weekday})`;
+}
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -68,7 +89,7 @@ export default async function TimesheetPage({
     // Группируем по дням
     const days: Record<string, typeof empRecords> = {};
     empRecords.forEach(r => {
-      const day = format(parseISO(r.recorded_at), 'yyyy-MM-dd');
+      const day = getAlmatyDateStr(r.recorded_at);
       if (!days[day]) days[day] = [];
       days[day].push(r);
     });
@@ -85,7 +106,7 @@ export default async function TimesheetPage({
       const firstIn = firstInRec?.recorded_at || null;
       const lastOut = lastOutRec?.recorded_at || null;
 
-      const formattedDay = format(parseISO(day), "d MMM (EEE)", { locale: ru });
+      const formattedDay = getAlmatyFormattedDay(day);
       const formattedFirstIn = firstIn ? format(parseISO(firstIn), "HH:mm") : "—";
       const formattedLastOut = lastOut ? format(parseISO(lastOut), "HH:mm") : "—";
 
@@ -144,7 +165,8 @@ export default async function TimesheetPage({
           status: 'complete' 
         });
       } else if (firstIn && !lastOut) {
-        const isToday = day === new Date().toISOString().split('T')[0];
+        const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const isToday = day === todayStr;
         if (!isToday) {
           missingCheckouts++;
           dailyDetails.push({ day, formattedDay, formattedFirstIn, formattedLastOut, firstIn, lastOut: null, status: 'missing_checkout' });
@@ -178,9 +200,7 @@ export default async function TimesheetPage({
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Табель</h1>
         <div className="flex space-x-4">
-          <div suppressHydrationWarning className="text-sm text-gray-500 bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200">
-            Период: {format(startDate, "LLLL yyyy", { locale: ru })}
-          </div>
+          <MonthSelector currentMonth={currentMonth} currentYear={currentYear} />
           <ExportCsvButton data={timesheet} month={periodStr} />
         </div>
       </div>
