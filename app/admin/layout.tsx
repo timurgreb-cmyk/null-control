@@ -44,7 +44,7 @@ export default async function AdminLayout({
       <AdminMobileMenu adminName={adminName} />
       
       {/* Sidebar */}
-      <div className="w-64 bg-white border-r border-gray-200 flex-col hidden md:flex">
+      <div className="w-64 bg-white border-r border-gray-200 flex-col hidden md:flex print:hidden">
         <div className="h-16 flex items-center px-6 border-b border-gray-200">
           <h1 className="text-xl font-bold text-gray-900">NULL.Control</h1>
         </div>
@@ -88,9 +88,9 @@ export default async function AdminLayout({
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
         {/* Mobile header could go here if needed, but admin is desktop focused */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-8">
+        <main className="flex-1 overflow-y-auto bg-gray-50 p-4 md:p-8 print:p-0 print:bg-white print:overflow-visible">
           {children}
         </main>
       </div>
