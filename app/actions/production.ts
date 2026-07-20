@@ -56,6 +56,7 @@ export async function uploadProductionLog(base64Image: string) {
     const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
 
     const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `Ты — учетчик на пекарне/кондитерском производстве. На фото рукописный отчет о произведенной продукции сотрудником за день.
 
@@ -71,79 +72,15 @@ ${PRODUCT_CATALOG}
 Верни СТРОГО JSON-массив без markdown-разметки и без лишнего текста.
 Формат: [{"product_name": "Название из справочника", "quantity": число}]`;
 
-    let result;
-    const modelsToTry = [
-      "gemini-2.5-flash", 
-      "gemini-3.5-flash", 
-      "gemini-3.1-pro", 
-      "gemini-2.5-pro", 
-      "gemini-2.5-flash-lite"
-    ];
-    let lastError = null;
-
-    for (let i = 0; i < modelsToTry.length; i++) {
-      const modelName = modelsToTry[i];
-      try {
-        console.log(`Attempting Gemini model: ${modelName}`);
-        const model = genAI.getGenerativeModel({ model: modelName });
-        result = await model.generateContent([
-          prompt,
-          {
-            inlineData: {
-              data: base64Data,
-              mimeType: mimeType
-            }
-          }
-        ]);
-        if (result) break;
-      } catch (err: any) {
-        console.warn(`Model ${modelName} failed:`, err?.message || err);
-        lastError = err;
-
-        // Если это ошибка 403 Forbidden (Ваш проект заблокирован Google/denied access)
-        const errMsg = String(err?.message || err);
-        if (errMsg.includes("403 Forbidden") || errMsg.includes("denied access") || errMsg.includes("Forbidden")) {
-          return { 
-            success: false, 
-            error: "Ваш API-ключ или проект Google AI Studio заблокирован (403 Forbidden: Your project has been denied access). Пожалуйста, создайте новый API-ключ в Google AI Studio (желательно на другом/личном Gmail-аккаунте) и обновите переменную GEMINI_API_KEY в Vercel."
-          };
-        }
-        
-        // Если упала основная модель, ждем 1.5 сек и пробуем её ещё один раз (защита от кратковременного сбоя сети)
-        if (i === 0) {
-          try {
-            console.log(`Retrying ${modelName} after 1.5s delay...`);
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            const model = genAI.getGenerativeModel({ model: modelName });
-            result = await model.generateContent([
-              prompt,
-              {
-                inlineData: {
-                  data: base64Data,
-                  mimeType: mimeType
-                }
-              }
-            ]);
-            if (result) break;
-          } catch (retryErr: any) {
-            console.warn(`Retry of ${modelName} failed:`, retryErr?.message || retryErr);
-            lastError = retryErr;
-            
-            const retryErrMsg = String(retryErr?.message || retryErr);
-            if (retryErrMsg.includes("403 Forbidden") || retryErrMsg.includes("denied access") || retryErrMsg.includes("Forbidden")) {
-              return { 
-                success: false, 
-                error: "Ваш API-ключ или проект Google AI Studio заблокирован (403 Forbidden: Your project has been denied access). Пожалуйста, создайте новый API-ключ в Google AI Studio (желательно на другом/личном Gmail-аккаунте) и обновите переменную GEMINI_API_KEY в Vercel."
-              };
-            }
-          }
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: mimeType
         }
       }
-    }
-
-    if (!result) {
-      throw lastError || new Error("Все доступные ИИ-модели вернули ошибку.");
-    }
+    ]);
 
     const responseText = result.response.text();
     let parsedData = [];
@@ -265,41 +202,6 @@ export async function deleteProductionLog(logId: string) {
       .delete()
       .eq('id', logId)
       .eq('employee_id', user.id);
-
-    if (error) return { success: false, error: error.message };
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-}
-
-export async function addManualProductionLog(productName: string, quantity: number) {
-  try {
-    const { createClient: createSessionClient } = await import("@/utils/supabase/server");
-    const sessionClient = createSessionClient();
-    const { data: { user } } = await sessionClient.auth.getUser();
-    if (!user) return { success: false, error: "Необходима авторизация" };
-
-    if (!productName || quantity <= 0) {
-      return { success: false, error: "Неверное название товара или количество" };
-    }
-
-    const supabaseAdmin = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
-    const recordDate = almatyNow.toISOString().split('T')[0];
-
-    const { error } = await supabaseAdmin
-      .from('production_logs')
-      .insert({
-        employee_id: user.id,
-        product_name: productName,
-        quantity,
-        record_date: recordDate
-      });
 
     if (error) return { success: false, error: error.message };
     return { success: true };

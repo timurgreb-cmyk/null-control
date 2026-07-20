@@ -1,8 +1,8 @@
 "use client";
 
-import { ScanLine, UserCircle, Briefcase, Wallet, Loader2 } from "lucide-react";
+import { ScanLine, UserCircle, Briefcase } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getCurrentProfile } from "@/app/actions/auth";
 
@@ -12,7 +12,6 @@ export default function EmployeeLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
@@ -23,48 +22,17 @@ export default function EmployeeLayout({
     fetchProfile();
   }, []);
 
-  const nameLower = profile?.full_name?.toLowerCase() || "";
-  const isFinanceUser = nameLower.includes("альфия") || nameLower.includes("эльмира") || nameLower.includes("тимур");
-  const isAgata = nameLower.includes("агата");
+  // Доступ только для Тимура и Рукием, либо если стоит галочка (если ты её добавлял)
+  const isTester = profile?.full_name?.toLowerCase().includes("тимур") || 
+                   profile?.full_name?.toLowerCase().includes("рукием") || 
+                   profile?.can_upload_production;
 
-  // Redirect logic to prevent finance users from accessing scanner/production
-  // and normal users from accessing finance tab
-  useEffect(() => {
-    if (!profile) return;
+  const tabs = [
+    { name: "Сканер", href: "/app/scan", icon: ScanLine },
+  ];
 
-    if (isFinanceUser) {
-      if (pathname === "/app/scan" || pathname === "/app/production") {
-        router.replace("/app/finance");
-      }
-    } else {
-      if (pathname === "/app/finance") {
-        router.replace("/app/scan");
-      }
-    }
-  }, [profile, pathname, isFinanceUser, router]);
-
-  const isWrongPage = (isFinanceUser && (pathname === "/app/scan" || pathname === "/app/production")) ||
-                      (!isFinanceUser && pathname === "/app/finance");
-
-  // While profile is loading or when redirecting, show a full-screen loading screen
-  if (!profile || isWrongPage) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#F3F4F6]">
-        <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
-        <span className="text-sm text-gray-500 font-medium">Загрузка...</span>
-      </div>
-    );
-  }
-
-  const tabs = [];
-
-  if (isFinanceUser) {
-    tabs.push({ name: "Финансы", href: "/app/finance", icon: Wallet });
-  } else {
-    tabs.push({ name: "Сканер", href: "/app/scan", icon: ScanLine });
-    if (!isAgata) {
-      tabs.push({ name: "Выработка", href: "/app/production", icon: Briefcase });
-    }
+  if (isTester) {
+    tabs.push({ name: "Выработка", href: "/app/production", icon: Briefcase });
   }
 
   tabs.push({ name: "Профиль", href: "/app/profile", icon: UserCircle });

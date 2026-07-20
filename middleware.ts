@@ -81,12 +81,6 @@ export async function middleware(request: NextRequest) {
     if (isAdminRoute && role !== "admin") {
       return NextResponse.redirect(new URL("/app/scan", request.url));
     }
-
-    if (isAppRoute && role === "admin") {
-       // Админы тоже могут зайти в PWA, если нужно, 
-       // но обычно перенаправляем на /admin
-      return NextResponse.redirect(new URL("/admin", request.url));
-    }
   }
 
   return response;

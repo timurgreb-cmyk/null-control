@@ -1,20 +1,27 @@
--- Функция для безопасной проверки роли без рекурсии в RLS политиках
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN COALESCE(
-    (SELECT role = 'admin' FROM public.profiles WHERE id = auth.uid()),
-    false
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- Таблица локаций (Locations)
 CREATE TABLE public.locations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     description TEXT,
     is_active BOOLEAN DEFAULT true,
+    latitude NUMERIC,
+    longitude NUMERIC,
+    radius_meters INTEGER DEFAULT 200,
+    is_geo_required BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Таблица журнала ошибок сканирования (Scan Errors Log)
+CREATE TABLE IF NOT EXISTS public.scan_errors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    location_id UUID REFERENCES public.locations(id) ON DELETE SET NULL,
+    error_message TEXT NOT NULL,
+    error_type TEXT NOT NULL,
+    scanned_text TEXT,
+    user_latitude NUMERIC,
+    user_longitude NUMERIC,
+    distance_meters NUMERIC,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -60,35 +67,33 @@ CREATE POLICY "Locations are viewable by everyone" ON public.locations
 
 CREATE POLICY "Locations are insertable by admin" ON public.locations
     FOR INSERT WITH CHECK (
-        public.is_admin()
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
 CREATE POLICY "Locations are updatable by admin" ON public.locations
     FOR UPDATE USING (
-        public.is_admin()
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
--- 2. Profiles: чтение своего профиля, или всех если admin (с защитой от рекурсии)
+-- 2. Profiles: чтение своего профиля, или всех если admin
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Admin can view all profiles" ON public.profiles;
+CREATE POLICY "Users can view their own profile" ON public.profiles
+    FOR SELECT USING (auth.uid() = id);
 
-CREATE POLICY "Profiles select policy" ON public.profiles
+CREATE POLICY "Admin can view all profiles" ON public.profiles
     FOR SELECT USING (
-        auth.uid() = id 
-        OR 
-        public.is_admin()
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
 CREATE POLICY "Admin can update all profiles" ON public.profiles
     FOR UPDATE USING (
-        public.is_admin()
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
 CREATE POLICY "Admin can insert profiles" ON public.profiles
     FOR INSERT WITH CHECK (
-        public.is_admin()
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
 -- 3. Time Records: чтение/запись своих записей, или всех если admin
@@ -102,12 +107,12 @@ CREATE POLICY "Users can insert their own time records" ON public.time_records
 
 CREATE POLICY "Admin can view all time records" ON public.time_records
     FOR SELECT USING (
-        public.is_admin()
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
 CREATE POLICY "Admin can update/delete all time records" ON public.time_records
     FOR ALL USING (
-        public.is_admin()
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
 -- 4. Shifts
@@ -118,7 +123,7 @@ CREATE POLICY "Users can view their own shifts" ON public.shifts
 
 CREATE POLICY "Admin can manage all shifts" ON public.shifts
     FOR ALL USING (
-        public.is_admin()
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
     );
 
 -- Функция для автоматического создания профиля (опционально, если admin создает юзера через auth API)

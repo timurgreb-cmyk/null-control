@@ -17,35 +17,38 @@ export default function ScanPage() {
   const [resultData, setResultData] = useState<{type: string, location: string} | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
 
-  // Принудительно освобождаем камеру при уходе со страницы или выключении сканера
-  useEffect(() => {
-    return () => {
-      try {
-        const videoElements = document.querySelectorAll("video");
-        videoElements.forEach((video) => {
-          const stream = video.srcObject as MediaStream;
-          if (stream && typeof stream.getTracks === "function") {
-            stream.getTracks().forEach((track) => {
-              track.stop();
-            });
-            video.srcObject = null;
-          }
-        });
-      } catch (err) {
-        console.error("Error stopping camera tracks:", err);
-      }
-    };
-  }, [cameraActive]);
-
   // Камера будет запускаться только по кнопке, 
   // чтобы iOS Safari не запрашивал разрешение при каждом открытии приложения
+
+  const getCoordinates = (): Promise<{ lat: number, lng: number } | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          });
+        },
+        (err) => {
+          console.warn("Geolocation denied or error:", err.message);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+  };
 
   const handleScan = async (data: any) => {
     if (data && data.text && status === "scanning") {
       setStatus("processing");
       
       const clientTime = new Date().toISOString();
-      const result = await processQRScan(data.text, clientTime);
+      const coords = await getCoordinates();
+      const result = await processQRScan(data.text, clientTime, coords);
       
       if (result.success && result.data) {
         setStatus("success");
