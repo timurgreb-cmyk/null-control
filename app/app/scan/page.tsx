@@ -20,24 +20,49 @@ export default function ScanPage() {
   // Камера будет запускаться только по кнопке, 
   // чтобы iOS Safari не запрашивал разрешение при каждом открытии приложения
 
+  const [userCoords, setUserCoords] = useState<{ lat: number, lng: number } | null>(null);
+
+  // Для iOS Safari геолокация запрашивается ТОЛЬКО по прямому клику пользователя (User Gesture)
+  const requestLocation = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        });
+      },
+      (err) => {
+        console.warn("iOS/Android Geolocation error:", err.message);
+      },
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 8000 }
+    );
+  };
+
   const getCoordinates = (): Promise<{ lat: number, lng: number } | null> => {
     return new Promise((resolve) => {
-      if (!navigator.geolocation) {
+      if (userCoords) {
+        resolve(userCoords);
+        return;
+      }
+      if (typeof window === "undefined" || !navigator.geolocation) {
         resolve(null);
         return;
       }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          resolve({
+          const coords = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude
-          });
+          };
+          setUserCoords(coords);
+          resolve(coords);
         },
         (err) => {
-          console.warn("Geolocation denied or error:", err.message);
+          console.warn("Geolocation Error:", err.message);
           resolve(null);
         },
-        { enableHighAccuracy: true, timeout: 5000 }
+        { enableHighAccuracy: false, maximumAge: 60000, timeout: 8000 }
       );
     });
   };
@@ -116,7 +141,10 @@ export default function ScanPage() {
             <h3 className="text-white text-xl font-bold mb-2">Готовы отметиться?</h3>
             <p className="text-gray-400 text-sm mb-10 max-w-[250px]">Нажмите кнопку ниже, чтобы включить сканер QR-кодов</p>
             <button 
-              onClick={() => setCameraActive(true)}
+              onClick={() => {
+                requestLocation();
+                setCameraActive(true);
+              }}
               className="bg-primary text-white w-full max-w-[280px] py-4 rounded-2xl font-bold text-lg shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 transition-all"
             >
               Включить сканер
