@@ -138,7 +138,17 @@ export async function processQRScan(
     const locLng = location.longitude ? parseFloat(location.longitude) : null;
     const allowedRadius = location.radius_meters ? parseInt(location.radius_meters) : 200;
 
-    if (locLat !== null && locLng !== null && location.is_geo_required !== false) {
+    // Проверяем профиль сотрудника на освобождение от гео-контроля (Евдокия / Huawei)
+    const { data: userProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("full_name, id")
+      .eq("id", user.id)
+      .single();
+
+    const isGeoExempt = userProfile?.id === "23f4e009-d729-44d7-be93-a6a0cf3b4629" || 
+                        userProfile?.full_name?.toLowerCase().includes("евдокия");
+
+    if (locLat !== null && locLng !== null && location.is_geo_required !== false && !isGeoExempt) {
       if (!userCoords || userCoords.lat === undefined || userCoords.lng === undefined) {
         const errMsg = "Включите геолокацию (GPS) на телефоне! Отметка вне геозоны невозможна.";
         await logScanError(supabaseAdmin, {
@@ -249,33 +259,7 @@ export async function processQRScan(
       }
     }
 
-    // Если это уход - проверяем выработку только если включена конкретная галочка can_upload_production
-    if (newRecordType === "check_out") {
-      const isRequired = employeeProfile?.can_upload_production === true;
 
-      if (isRequired && lastRecord && lastRecord.record_type === "check_in") {
-        const { data: prodLogs } = await supabaseAdmin
-          .from("production_logs")
-          .select("id")
-          .eq("employee_id", user.id)
-          .gte("created_at", lastRecord.recorded_at)
-          .limit(1);
-
-        if (!prodLogs || prodLogs.length === 0) {
-          const errMsg = "Сначала загрузите выработку за эту смену во вкладке «Выработка»!";
-          await logScanError(supabaseAdmin, {
-            employeeId: user.id,
-            locationId: location.id,
-            errorMessage: errMsg,
-            errorType: "production_log_missing",
-            scannedText: locationId,
-            userLat: userCoords?.lat,
-            userLng: userCoords?.lng
-          });
-          return { success: false, error: errMsg };
-        }
-      }
-    }
 
     // 5. Запись в базу с использованием клиентского времени
     const { error: insertError } = await supabaseAdmin
