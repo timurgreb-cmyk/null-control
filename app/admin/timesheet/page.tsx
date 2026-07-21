@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format } from "date-fns";
 import { ru } from "date-fns/locale";
 import ExportCsvButton from "./ExportCsvButton";
+import MonthSelector from "./MonthSelector";
 import TimesheetRow from "@/components/admin/TimesheetRow";
 
 export const dynamic = "force-dynamic";
@@ -175,12 +176,10 @@ export default async function TimesheetPage({
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Табель</h1>
-        <div className="flex space-x-4">
-          <div suppressHydrationWarning className="text-sm text-gray-500 bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200">
-            Период: {format(startDate, "LLLL yyyy", { locale: ru })}
-          </div>
+        <div className="flex items-center space-x-3">
+          <MonthSelector currentMonth={currentMonth} currentYear={currentYear} />
           <ExportCsvButton data={timesheet} month={periodStr} />
         </div>
       </div>
