@@ -122,8 +122,8 @@ export default function ScanPage() {
               constraints={{
                 video: { 
                   facingMode: "environment",
-                  width: { ideal: 1280 },
-                  height: { ideal: 720 }
+                  width: { ideal: 640 },
+                  height: { ideal: 480 }
                 }
               }}
             />
@@ -163,7 +163,7 @@ export default function ScanPage() {
               <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-primary rounded-br-3xl" />
               <div className="absolute top-0 left-0 w-full h-[2px] bg-primary/80 shadow-[0_0_15px_rgba(37,99,235,1)] rounded-full animate-[scan_2s_ease-in-out_infinite]" />
             </div>
-            <div className="bg-black/40 backdrop-blur-md border border-white/10 text-white font-medium px-6 py-3 rounded-2xl shadow-xl">
+            <div className="bg-black/80 border border-white/10 text-white font-medium px-6 py-3 rounded-2xl shadow-xl">
               Наведите на QR-код
             </div>
           </div>
@@ -171,7 +171,7 @@ export default function ScanPage() {
 
         {/* Оверлеи состояний (Processing, Success, Error) - оставить без изменений */}
         {status === "processing" && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-20 flex flex-col items-center justify-center">
+          <div className="absolute inset-0 bg-black/80 z-20 flex flex-col items-center justify-center">
             <div className="bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center">
               <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
               <p className="text-gray-900 font-bold">Обработка...</p>
@@ -180,7 +180,7 @@ export default function ScanPage() {
         )}
 
         {status === "success" && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-20 flex flex-col items-center justify-center p-6 text-center">
+          <div className="absolute inset-0 bg-black/85 z-20 flex flex-col items-center justify-center p-6 text-center">
             <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl flex flex-col items-center">
               <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-500/30">
                 <CheckCircle2 className="w-10 h-10 text-white" />
@@ -203,7 +203,7 @@ export default function ScanPage() {
         )}
 
         {status === "error" && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-20 flex flex-col items-center justify-center p-6 text-center">
+          <div className="absolute inset-0 bg-black/85 z-20 flex flex-col items-center justify-center p-6 text-center">
             <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl flex flex-col items-center">
               <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center mb-6 shadow-lg shadow-red-500/30">
                 <XCircle className="w-10 h-10 text-white" />
