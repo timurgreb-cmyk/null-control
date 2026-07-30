@@ -11,9 +11,9 @@ const PRODUCT_CATALOG = `
 
 МИНИ-ПИРОГИ: Мини семга/рис, Мини курица брынза шпинат, Мини фарш/тыква, Мини пирог капуста-яйцо.
 
-ПИРОГИ МЯСНЫЕ (размеры 24/30/35, половина, четверть): Курица Картофель, Курица Грибы, Фарш Тыква, Фарш Картофель, Семга Рис, Брынза Шпинат, Мясо Картофель, Курица Брынза Шпинат, Капуста Яйцо, Утка Картофель, Картофель Грибы, Губадия.
+ПИРОГИ МЯСНЫЕ (размеры 24/30/35, половина, четверть): Курица Картофель, Курица Грибы, Фарш Тыква, Фарш Картофель, Семга Рис, Брынза Шпинат, Мясо Картофель, Курица Брынза Шпинат, Капуста Яйцо, Утка Картофель, Картофель Грибы, Губадия, Рудольф.
 
-СЛАДКИЕ ПИРОГИ (размеры 24/30/35, половина, четверть): Трехслойный, Сметанник с персиками, Сметанник с вишней, Сметанник с малиной, Лимонник, Смородиновый, Ассорти (смородина лимон), Курага, Курага Орех, Творог Яблоко, Творожно Маковый, Тропический, Клубничный.
+СЛАДКИЕ ПИРОГИ (размеры 24/30/35, половина, четверть): Трехслойный, Сметанник с персиками, Сметанник с вишней, Сметанник с малиной, Лимонник, Смородиновый, Ассорти (смородина лимон), Курага, Курага Орех, Творог Яблоко, Творожно Маковый, Тропический, Клубничный, Рудольф.
 
 ДЕСЕРТЫ: Вупи Пай, Десерт в стаканчике Красный бархат, Десерт в стаканчике Шоколадный, Кольцо заварное, Муравейник, Муссовый Котик, Маффин ванильный, Леденец на палочке, Рулет Меренга (целый/половина), Чизкейк в имбирном печенье, Чизкейк в шоколадном печенье, Эклер с заварным кремом 100г, Шу 60г, Пломбир на палочке, Рулет с шоколадом, Рулет с орехом, Рулет с малиной.
 
@@ -67,10 +67,11 @@ ${PRODUCT_CATALOG}
 1. Сопоставляй рукописный текст с названиями из справочника выше. Если почерк нечёткий, выбирай САМЫЙ ПОХОЖИЙ вариант из справочника.
 2. Если указан размер (24, 30, 35) или формат (половина, четверть), включи в название.
 3. Если на фото написано сокращение (напр. "К/К" = Курица Картофель, "Б/Ш" = Брынза Шпинат), расшифруй полностью.
-4. Количество — всегда целое число.
+4. Количество (quantity) — может быть как целым, так и дробным числом (например: 1.5, 0.5, 2.25).
+5. Единица измерения (unit) — определи из текста: "шт.", "кг", "г", "л", "мл", "упк", "порц". Если не указано, поставь "шт.".
 
 Верни СТРОГО JSON-массив без markdown-разметки и без лишнего текста.
-Формат: [{"product_name": "Название из справочника", "quantity": число}]`;
+Формат: [{"product_name": "Название из справочника", "quantity": число, "unit": "ед.изм."}]`;
 
     const result = await model.generateContent([
       prompt,
@@ -107,21 +108,47 @@ ${PRODUCT_CATALOG}
     const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
     const recordDate = almatyNow.toISOString().split('T')[0];
 
-    const inserts = parsedData.map((item: any) => ({
-      employee_id: user.id,
-      product_name: item.product_name,
-      quantity: parseInt(item.quantity) || 0,
-      record_date: recordDate
-    })).filter(i => i.quantity > 0 && i.product_name);
+    const inserts = parsedData.map((item: any) => {
+      const qty = parseFloat(item.quantity) || 0;
+      const unitVal = item.unit || "шт.";
+      return {
+        employee_id: user.id,
+        product_name: item.product_name,
+        quantity: qty,
+        unit: unitVal,
+        record_date: recordDate
+      };
+    }).filter(i => i.quantity > 0 && i.product_name);
 
     if (inserts.length === 0) return { success: false, error: "Распознаны невалидные данные" };
 
-    const { error: insertError } = await supabaseAdmin
+    // Пробуем вставить с колонкой unit
+    let { error: insertError } = await supabaseAdmin
       .from('production_logs')
       .insert(inserts);
 
+    // Если нет колонки unit или тип integer, обрабатываем с фолбэком
     if (insertError) {
-      return { success: false, error: "Ошибка сохранения в базу: " + insertError.message };
+      const fallbackInserts = inserts.map(i => {
+        let name = i.product_name;
+        if (i.unit && i.unit !== "шт." && !name.includes(`(${i.unit})`)) {
+          name = `${name} (${i.unit})`;
+        }
+        return {
+          employee_id: i.employee_id,
+          product_name: name,
+          quantity: insertError?.message?.includes("integer") ? Math.round(i.quantity) : i.quantity,
+          record_date: i.record_date
+        };
+      });
+
+      const { error: retryError } = await supabaseAdmin
+        .from('production_logs')
+        .insert(fallbackInserts);
+
+      if (retryError) {
+        return { success: false, error: "Ошибка сохранения в базу: " + retryError.message };
+      }
     }
 
     return { success: true, data: inserts };
@@ -149,7 +176,7 @@ export async function getTodayProductionLogs() {
     
     const { data } = await supabaseAdmin
       .from('production_logs')
-      .select('id, product_name, quantity, created_at')
+      .select('id, product_name, quantity, unit, created_at')
       .eq('employee_id', user.id)
       .eq('record_date', recordDate)
       .order('created_at', { ascending: false });
@@ -160,7 +187,7 @@ export async function getTodayProductionLogs() {
   }
 }
 
-export async function updateProductionLog(logId: string, productName: string, quantity: number) {
+export async function updateProductionLog(logId: string, productName: string, quantity: number, unit: string = "шт.") {
   try {
     const { createClient: createSessionClient } = await import("@/utils/supabase/server");
     const sessionClient = createSessionClient();
@@ -172,13 +199,32 @@ export async function updateProductionLog(logId: string, productName: string, qu
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { error } = await supabaseAdmin
+    const numQty = Number(quantity);
+
+    // Пробуем обновить с колонкой unit
+    let { error } = await supabaseAdmin
       .from('production_logs')
-      .update({ product_name: productName, quantity })
+      .update({ product_name: productName, quantity: numQty, unit })
       .eq('id', logId)
       .eq('employee_id', user.id);
 
-    if (error) return { success: false, error: error.message };
+    if (error) {
+      // Фолбэк если нет колонки unit или integer
+      let finalName = productName;
+      if (unit && unit !== "шт." && !finalName.includes(`(${unit})`)) {
+        finalName = `${finalName} (${unit})`;
+      }
+      const { error: retryError } = await supabaseAdmin
+        .from('production_logs')
+        .update({ 
+          product_name: finalName, 
+          quantity: error.message.includes("integer") ? Math.round(numQty) : numQty 
+        })
+        .eq('id', logId)
+        .eq('employee_id', user.id);
+
+      if (retryError) return { success: false, error: retryError.message };
+    }
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -210,14 +256,15 @@ export async function deleteProductionLog(logId: string) {
   }
 }
 
-export async function addManualProductionLog(productName: string, quantity: number) {
+export async function addManualProductionLog(productName: string, quantity: number, unit: string = "шт.") {
   try {
     const { createClient: createSessionClient } = await import("@/utils/supabase/server");
     const sessionClient = createSessionClient();
     const { data: { user } } = await sessionClient.auth.getUser();
     if (!user) return { success: false, error: "Необходима авторизация" };
 
-    if (!productName || quantity <= 0) {
+    const numQty = Number(quantity);
+    if (!productName || isNaN(numQty) || numQty <= 0) {
       return { success: false, error: "Неверное название товара или количество" };
     }
 
@@ -229,16 +276,33 @@ export async function addManualProductionLog(productName: string, quantity: numb
     const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
     const recordDate = almatyNow.toISOString().split('T')[0];
 
-    const { error } = await supabaseAdmin
+    // Пробуем вставить с unit
+    let { error } = await supabaseAdmin
       .from('production_logs')
       .insert({
         employee_id: user.id,
         product_name: productName,
-        quantity,
+        quantity: numQty,
+        unit: unit || "шт.",
         record_date: recordDate
       });
 
-    if (error) return { success: false, error: error.message };
+    if (error) {
+      let finalName = productName;
+      if (unit && unit !== "шт." && !finalName.includes(`(${unit})`)) {
+        finalName = `${finalName} (${unit})`;
+      }
+      const { error: retryError } = await supabaseAdmin
+        .from('production_logs')
+        .insert({
+          employee_id: user.id,
+          product_name: finalName,
+          quantity: error.message.includes("integer") ? Math.round(numQty) : numQty,
+          record_date: recordDate
+        });
+
+      if (retryError) return { success: false, error: retryError.message };
+    }
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };

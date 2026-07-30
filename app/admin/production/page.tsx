@@ -21,6 +21,7 @@ export default async function ProductionAdminPage() {
       id,
       product_name,
       quantity,
+      unit,
       record_date,
       created_at,
       employee_id,
@@ -77,7 +78,7 @@ export default async function ProductionAdminPage() {
                          {record.product_name}
                        </span>
                        <div className="text-gray-900 font-bold">
-                         {record.quantity} шт.
+                         {record.quantity} {record.unit || "шт."}
                        </div>
                      </div>
                      <div className="flex justify-between items-end mt-1">

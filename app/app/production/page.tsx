@@ -10,7 +10,7 @@ const ALL_PRODUCTS = [
   "Мини семга/рис", "Мини курица брынза шпинат", "Мини фарш/тыква", "Мини пирог капуста-яйцо",
   "Пирог Курица Картофель", "Пирог Курица Грибы", "Пирог Фарш Тыква", "Пирог Фарш Картофель", "Пирог Семга Рис", 
   "Пирог Брынза Шпинат", "Пирог Мясо Картофель", "Пирог Курица Брынза Шпинат", "Пирог Капуста Яйцо", 
-  "Пирог Утка Картофель", "Пирог Картофель Грибы", "Пирог Губадия",
+  "Пирог Утка Картофель", "Пирог Картофель Грибы", "Пирог Губадия", "Пирог Рудольф",
   "Пирог Трехслойный", "Пирог Сметанник с персиками", "Пирог Сметанник с вишней", "Пирог Сметанник с малиной", 
   "Пирог Лимонник", "Пирог Смородиновый", "Пирог Ассорти (смородина лимон)", "Пирог Курага", "Пирог Курага Орех", 
   "Пирог Творог Яблоко", "Пирог Творожно Маковый", "Пирог Тропический", "Пирог Клубничный",
@@ -44,13 +44,17 @@ export default function ProductionPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editQty, setEditQty] = useState(0);
+  const [editQty, setEditQty] = useState<number | "">(0);
+  const [editUnit, setEditUnit] = useState("шт.");
 
   // Ручной ввод
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualSearch, setManualSearch] = useState("");
   const [manualQty, setManualQty] = useState<number | "">("");
+  const [manualUnit, setManualUnit] = useState("шт.");
   const [showDropdown, setShowDropdown] = useState(false);
+
+  const UNITS = ["шт.", "кг", "г", "л", "мл", "упк", "порц"];
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -152,20 +156,22 @@ export default function ProductionPage() {
     setEditingId(item.id);
     setEditName(item.product_name);
     setEditQty(item.quantity);
+    setEditUnit(item.unit || "шт.");
   };
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
     const previousHistory = [...history];
+    const numQty = Number(editQty);
 
     setHistory(prev => prev.map(item => 
       item.id === editingId 
-        ? { ...item, product_name: editName, quantity: editQty } 
+        ? { ...item, product_name: editName, quantity: numQty, unit: editUnit } 
         : item
     ));
     setEditingId(null);
 
-    const res = await updateProductionLog(editingId, editName, editQty);
+    const res = await updateProductionLog(editingId, editName, numQty, editUnit);
     if (!res.success) {
       setError(res.error || "Ошибка обновления");
       setHistory(previousHistory);
@@ -187,13 +193,13 @@ export default function ProductionPage() {
 
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualSearch.trim() || !manualQty || Number(manualQty) <= 0) {
+    const quantity = Number(manualQty);
+    if (!manualSearch.trim() || isNaN(quantity) || quantity <= 0) {
       setError("Пожалуйста, выберите товар и введите количество больше 0");
       return;
     }
 
     const productName = manualSearch.trim();
-    const quantity = Number(manualQty);
     const tempId = `temp-${Date.now()}`;
     const previousHistory = [...history];
 
@@ -201,6 +207,7 @@ export default function ProductionPage() {
       id: tempId,
       product_name: productName,
       quantity: quantity,
+      unit: manualUnit,
       created_at: new Date().toISOString()
     };
 
@@ -209,7 +216,7 @@ export default function ProductionPage() {
     setManualQty("");
     setShowManualForm(false);
 
-    const res = await addManualProductionLog(productName, quantity);
+    const res = await addManualProductionLog(productName, quantity, manualUnit);
     if (res.success) {
       loadHistory();
     } else {
@@ -249,7 +256,7 @@ export default function ProductionPage() {
               {result.map((item, idx) => (
                 <li key={idx} className="flex justify-between border-b border-gray-50 last:border-0 pb-2 last:pb-0">
                   <span className="text-gray-600">{item.product_name}</span>
-                  <span className="font-bold">{item.quantity} шт.</span>
+                  <span className="font-bold">{item.quantity} {item.unit || "шт."}</span>
                 </li>
               ))}
             </ul>
@@ -317,7 +324,7 @@ export default function ProductionPage() {
         </div>
       )}
 
-      {/* Форма ручного ввода с автокомплитом */}
+      {/* Форма ручного ввода с автокомплитом и выбором ед. изм */}
       {showManualForm && !loading && (
         <form onSubmit={handleManualAdd} className="bg-white border border-gray-100 rounded-2xl p-5 mb-8 shadow-sm space-y-4 transition-all duration-300">
           <h3 className="font-bold text-gray-900 border-b border-gray-50 pb-2">Ручной ввод выработки</h3>
@@ -366,17 +373,50 @@ export default function ProductionPage() {
             )}
           </div>
 
-          {/* Количество */}
-          <div>
-            <label className="text-xs text-gray-400 font-bold block mb-1">КОЛИЧЕСТВО (ШТ)</label>
-            <input
-              type="number"
-              placeholder="Введите количество..."
-              value={manualQty}
-              onChange={(e) => setManualQty(e.target.value === "" ? "" : Number(e.target.value))}
-              className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-              min="1"
-            />
+          {/* Количество и Единица измерения */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-400 font-bold block mb-1">КОЛИЧЕСТВО</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="например: 1.5"
+                value={manualQty}
+                onChange={(e) => setManualQty(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 font-bold block mb-1">ЕД. ИЗМЕРЕНИЯ</label>
+              <select
+                value={manualUnit}
+                onChange={(e) => setManualUnit(e.target.value)}
+                className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-primary focus:outline-none font-bold text-gray-700"
+              >
+                {UNITS.map(u => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Кнопки выбора ед. изм. в 1 клик */}
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {UNITS.map((u) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => setManualUnit(u)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  manualUnit === u 
+                    ? "bg-primary text-white shadow-sm" 
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {u}
+              </button>
+            ))}
           </div>
 
           {/* Кнопки управления формы */}
@@ -438,12 +478,22 @@ export default function ProductionPage() {
                       <div className="flex items-center gap-2">
                         <input
                           type="number"
+                          step="0.01"
+                          min="0.01"
                           value={editQty}
-                          onChange={(e) => setEditQty(parseInt(e.target.value) || 0)}
+                          onChange={(e) => setEditQty(e.target.value === "" ? "" : Number(e.target.value))}
                           className="w-24 p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
                           placeholder="Кол-во"
                         />
-                        <span className="text-gray-400 text-sm">шт.</span>
+                        <select
+                          value={editUnit}
+                          onChange={(e) => setEditUnit(e.target.value)}
+                          className="p-2.5 border border-gray-200 rounded-xl text-sm bg-white font-bold text-gray-700 focus:outline-none"
+                        >
+                          {UNITS.map(u => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
                         <div className="ml-auto flex gap-2">
                           <button
                             onClick={handleSaveEdit}
@@ -468,7 +518,7 @@ export default function ProductionPage() {
                       </div>
                       <div className="flex items-center gap-2 ml-3">
                         <div className="bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">
-                          {item.quantity} шт.
+                          {item.quantity} {item.unit || "шт."}
                         </div>
                         <button
                           onClick={() => handleEdit(item)}
