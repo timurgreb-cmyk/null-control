@@ -41,7 +41,6 @@ const PRODUCT_CATALOG = `
 `;
 
 function getAlmatyDateString(): string {
-  // Вычисляет YYYY-MM-DD строго в часовом поясе Алматы (Asia/Almaty) без смещения UTC
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Almaty' });
 }
 
@@ -71,7 +70,7 @@ ${PRODUCT_CATALOG}
 1. Сопоставляй рукописный текст с названиями из справочника выше. Если почерк нечёткий, выбирай САМЫЙ ПОХОЖИЙ вариант из справочника.
 2. Если указан размер (24, 30, 35) или формат (половина, четверть), включи в название.
 3. Если на фото написано сокращение (напр. "К/К" = Курица Картофель, "Б/Ш" = Брынза Шпинат), расшифруй полностью.
-4. Количество (quantity) — может быть как целым, так и дробным числом (например: 1.5, 0.5, 2.25).
+4. Количество (quantity) — целое или дробное число.
 5. Единица измерения (unit) — определи из текста: "шт.", "кг", "г", "л", "мл", "упк", "порц". Если не указано, поставь "шт.".
 
 Верни СТРОГО JSON-массив без markdown-разметки и без лишнего текста.
@@ -110,53 +109,34 @@ ${PRODUCT_CATALOG}
     const recordDate = getAlmatyDateString();
 
     const inserts = parsedData.map((item: any) => {
-      const qty = parseFloat(item.quantity) || 0;
+      const rawQty = parseFloat(item.quantity) || 0;
       const unitVal = item.unit || "шт.";
+      let name = item.product_name || "Продукция";
+      if (unitVal && unitVal !== "шт." && !name.includes(`(${unitVal})`)) {
+        name = `${name} (${unitVal})`;
+      }
+      const safeQty = Math.max(1, Math.round(rawQty));
       return {
         employee_id: user.id,
-        product_name: item.product_name,
-        quantity: qty,
-        unit: unitVal,
+        product_name: name,
+        quantity: safeQty,
         record_date: recordDate
       };
     }).filter(i => i.quantity > 0 && i.product_name);
 
     if (inserts.length === 0) return { success: false, error: "Распознаны невалидные данные" };
 
-    let insertedRecords = [];
-    let { data: insertResult, error: insertError } = await supabaseAdmin
+    const { data: insertedRecords, error: insertError } = await supabaseAdmin
       .from('production_logs')
       .insert(inserts)
-      .select('id, product_name, quantity, unit, created_at, record_date');
+      .select('id, product_name, quantity, created_at, record_date');
 
     if (insertError) {
-      const fallbackInserts = inserts.map(i => {
-        let name = i.product_name;
-        if (i.unit && i.unit !== "шт." && !name.includes(`(${i.unit})`)) {
-          name = `${name} (${i.unit})`;
-        }
-        return {
-          employee_id: i.employee_id,
-          product_name: name,
-          quantity: insertError?.message?.includes("integer") ? Math.round(i.quantity) : i.quantity,
-          record_date: i.record_date
-        };
-      });
-
-      const { data: retryData, error: retryError } = await supabaseAdmin
-        .from('production_logs')
-        .insert(fallbackInserts)
-        .select('id, product_name, quantity, unit, created_at, record_date');
-
-      if (retryError) {
-        return { success: false, error: "Ошибка сохранения в базу: " + retryError.message };
-      }
-      insertedRecords = retryData || [];
-    } else {
-      insertedRecords = insertResult || [];
+      console.error("Error inserting production logs:", insertError);
+      return { success: false, error: `Ошибка сохранения в базу: ${insertError.message}` };
     }
 
-    return { success: true, data: insertedRecords.length > 0 ? insertedRecords : inserts };
+    return { success: true, data: insertedRecords || [] };
 
   } catch (error: any) {
     console.error("Production Upload Exception:", error);
@@ -178,28 +158,17 @@ export async function getTodayProductionLogs() {
 
     const almatyDate = getAlmatyDateString();
     
-    // Получаем записи за сегодня по Алматы или за последние 24 часа
     const { data, error } = await supabaseAdmin
       .from('production_logs')
-      .select('id, product_name, quantity, unit, created_at, record_date')
+      .select('id, product_name, quantity, created_at, record_date')
       .eq('employee_id', user.id)
-      .or(`record_date.eq.${almatyDate},created_at.gte.${new Date(Date.now() - 24 * 3600 * 1000).toISOString()}`)
+      .eq('record_date', almatyDate)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error("Error fetching logs, fallback to latest 100:", error);
-      const { data: fallbackData } = await supabaseAdmin
-        .from('production_logs')
-        .select('id, product_name, quantity, unit, created_at, record_date')
-        .eq('employee_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      return { success: true, data: fallbackData || [] };
-    }
-
+    if (error) return { success: false, data: [], error: error.message };
     return { success: true, data: data || [] };
-  } catch (err) {
-    return { success: false, data: [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
   }
 }
 
@@ -210,35 +179,33 @@ export async function updateProductionLog(logId: string, productName: string, qu
     const { data: { user } } = await sessionClient.auth.getUser();
     if (!user) return { success: false, error: "Необходима авторизация" };
 
+    const rawQty = Number(quantity);
+    if (!productName || isNaN(rawQty) || rawQty <= 0) {
+      return { success: false, error: "Неверные параметры" };
+    }
+
+    let finalName = productName.trim();
+    if (unit && unit !== "шт." && !finalName.includes(`(${unit})`)) {
+      finalName = `${finalName} (${unit})`;
+    }
+
+    const safeQty = Math.max(1, Math.round(rawQty));
+
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const numQty = Number(quantity);
-
-    let { error } = await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('production_logs')
-      .update({ product_name: productName, quantity: numQty, unit })
+      .update({
+        product_name: finalName,
+        quantity: safeQty
+      })
       .eq('id', logId)
       .eq('employee_id', user.id);
 
-    if (error) {
-      let finalName = productName;
-      if (unit && unit !== "шт." && !finalName.includes(`(${unit})`)) {
-        finalName = `${finalName} (${unit})`;
-      }
-      const { error: retryError } = await supabaseAdmin
-        .from('production_logs')
-        .update({ 
-          product_name: finalName, 
-          quantity: error.message.includes("integer") ? Math.round(numQty) : numQty 
-        })
-        .eq('id', logId)
-        .eq('employee_id', user.id);
-
-      if (retryError) return { success: false, error: retryError.message };
-    }
+    if (error) return { success: false, error: error.message };
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -277,8 +244,8 @@ export async function addManualProductionLog(productName: string, quantity: numb
     const { data: { user } } = await sessionClient.auth.getUser();
     if (!user) return { success: false, error: "Необходима авторизация" };
 
-    const numQty = Number(quantity);
-    if (!productName || isNaN(numQty) || numQty <= 0) {
+    const rawQty = Number(quantity);
+    if (!productName || isNaN(rawQty) || rawQty <= 0) {
       return { success: false, error: "Неверное название товара или количество" };
     }
 
@@ -289,40 +256,29 @@ export async function addManualProductionLog(productName: string, quantity: numb
 
     const recordDate = getAlmatyDateString();
 
-    let insertedRecord = null;
-    let { data, error } = await supabaseAdmin
+    let finalName = productName.trim();
+    if (unit && unit !== "шт." && !finalName.includes(`(${unit})`)) {
+      finalName = `${finalName} (${unit})`;
+    }
+
+    const safeQty = Math.max(1, Math.round(rawQty));
+
+    const { data, error } = await supabaseAdmin
       .from('production_logs')
       .insert({
         employee_id: user.id,
-        product_name: productName,
-        quantity: numQty,
-        unit: unit || "шт.",
+        product_name: finalName,
+        quantity: safeQty,
         record_date: recordDate
       })
-      .select('id, product_name, quantity, unit, created_at, record_date');
+      .select('id, product_name, quantity, created_at, record_date');
 
     if (error) {
-      let finalName = productName;
-      if (unit && unit !== "шт." && !finalName.includes(`(${unit})`)) {
-        finalName = `${finalName} (${unit})`;
-      }
-      const { data: retryData, error: retryError } = await supabaseAdmin
-        .from('production_logs')
-        .insert({
-          employee_id: user.id,
-          product_name: finalName,
-          quantity: error.message.includes("integer") ? Math.round(numQty) : numQty,
-          record_date: recordDate
-        })
-        .select('id, product_name, quantity, unit, created_at, record_date');
-
-      if (retryError) return { success: false, error: retryError.message };
-      insertedRecord = retryData?.[0];
-    } else {
-      insertedRecord = data?.[0];
+      console.error("Error inserting manual production log:", error);
+      return { success: false, error: error.message };
     }
 
-    return { success: true, data: insertedRecord };
+    return { success: true, data: data?.[0] };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
