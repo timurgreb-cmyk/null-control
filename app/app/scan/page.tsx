@@ -231,7 +231,7 @@ export default function ScanPage() {
             </div>
 
             {/* КВАДРАТИК СКАНЕРА */}
-            <div className="w-68 h-68 relative flex-shrink-0 my-auto">
+            <div className="w-64 h-64 sm:w-72 sm:h-72 aspect-square relative flex-shrink-0 my-auto">
               {/* Подложка */}
               <div className="absolute inset-0 border border-white/10 rounded-3xl" />
               {/* Уголки */}

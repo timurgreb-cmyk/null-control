@@ -113,18 +113,18 @@ export default async function TimesheetPage({
           }
         }
         
-        let overtime = calculatedOvertime;
-        let requiresApproval = calculatedOvertime > 3;
+        let overtime = 0;
+        let requiresApproval = calculatedOvertime > 0;
         let approvalStatus = 'none';
 
         if (requiresApproval) {
           const existingApproval = approvalsData?.find(a => a.employee_id === emp.id && a.record_date === day);
           if (existingApproval) {
             approvalStatus = existingApproval.status;
-            overtime = existingApproval.status === 'approved' ? existingApproval.approved_hours : 0;
+            overtime = existingApproval.status === 'approved' ? (existingApproval.approved_hours || 0) : 0;
           } else {
             approvalStatus = 'pending';
-            overtime = 0; // Пока не одобрено, не начисляем
+            overtime = 0; // Пока не одобрено админом, не начисляем
           }
         }
 

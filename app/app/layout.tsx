@@ -1,6 +1,6 @@
 "use client";
 
-import { ScanLine, UserCircle, Briefcase } from "lucide-react";
+import { ScanLine, Briefcase, CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -25,7 +25,7 @@ export default function EmployeeLayout({
   const tabs = [
     { name: "Сканер", href: "/app/scan", icon: ScanLine },
     { name: "Выработка", href: "/app/production", icon: Briefcase },
-    { name: "Профиль", href: "/app/profile", icon: UserCircle },
+    { name: "Табель", href: "/app/timesheet", icon: CalendarDays },
   ];
 
   return (
@@ -37,7 +37,7 @@ export default function EmployeeLayout({
           <div className="flex justify-around items-center h-16 relative">
             {tabs.map((tab) => {
               const Icon = tab.icon;
-              const isActive = pathname === tab.href;
+              const isActive = pathname === tab.href || (tab.href === "/app/timesheet" && pathname === "/app/profile");
               return (
                 <Link
                   key={tab.name}
