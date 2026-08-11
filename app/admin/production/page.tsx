@@ -1,27 +1,26 @@
-// ok
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { format, parseISO } from "date-fns";
 import { ru } from "date-fns/locale";
 import LocalTime from "@/components/LocalTime";
 import DeleteProductionButton from "./DeleteProductionButton";
+import { formatLocalTime } from "@/utils/date";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function ProductionAdminPage() {
-  const supabase = createClient(
+  const supabase = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  // Получаем логи с именами сотрудников
+  // Получаем логи с именами сотрудников без запроса несуществующего столбца unit
   const { data: logs, error } = await supabase
     .from("production_logs")
     .select(`
       id,
       product_name,
       quantity,
-      unit,
       record_date,
       created_at,
       employee_id,
@@ -37,7 +36,7 @@ export default async function ProductionAdminPage() {
     console.error("Ошибка загрузки выработки:", error);
   }
 
-  // Группировка по сотрудникам (как в журнале отметок)
+  // Группировка по сотрудникам
   const groupedByEmployee: Record<string, { employeeName: string, employeeId: string, records: any[] }> = {};
   
   logs?.forEach((log) => {
@@ -57,7 +56,13 @@ export default async function ProductionAdminPage() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Выработка продукции</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Выработка продукции</h1>
+          <p className="text-xs text-gray-500 mt-1">Отчеты сотрудников по выработанной выпечке</p>
+        </div>
+        <div className="bg-primary/10 text-primary font-bold px-4 py-2 rounded-2xl text-xs">
+          Всего записей: {logs?.length || 0}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

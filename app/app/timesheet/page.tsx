@@ -3,6 +3,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format, addMonths, subMonths } from "date-fns";
 import { ru } from "date-fns/locale";
 import { CalendarDays, Clock, MapPin, ChevronLeft, ChevronRight, Wallet, AlertTriangle, LogOut, UserCircle } from "lucide-react";
+import { formatLocalTime } from "@/utils/date";
 import Link from "next/link";
 import { logout } from "@/app/actions/auth";
 
@@ -106,8 +107,8 @@ export default async function EmployeeTimesheetPage({
     const lastOut = lastOutRec?.recorded_at || null;
 
     const formattedDay = format(parseISO(day), "d MMMM (EEE)", { locale: ru });
-    const formattedFirstIn = firstIn ? format(parseISO(firstIn), "HH:mm") : "—";
-    const formattedLastOut = lastOut ? format(parseISO(lastOut), "HH:mm") : "—";
+    const formattedFirstIn = firstIn ? formatLocalTime(firstIn) : "—";
+    const formattedLastOut = lastOut ? formatLocalTime(lastOut) : "—";
     const locationName = (firstInRec?.locations as any)?.name || "Пекарня";
 
     if (firstIn && lastOut) {

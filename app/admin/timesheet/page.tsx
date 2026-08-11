@@ -1,6 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { formatLocalTime } from "@/utils/date";
 import ExportCsvButton from "./ExportCsvButton";
 import MonthSelector from "./MonthSelector";
 import TimesheetRow from "@/components/admin/TimesheetRow";
@@ -13,7 +14,7 @@ export default async function TimesheetPage({
 }: {
   searchParams: { month?: string; year?: string };
 }) {
-  const supabase = createClient(
+  const supabase = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
@@ -87,8 +88,8 @@ export default async function TimesheetPage({
       const lastOut = lastOutRec?.recorded_at || null;
 
       const formattedDay = format(parseISO(day), "d MMM (EEE)", { locale: ru });
-      const formattedFirstIn = firstIn ? format(parseISO(firstIn), "HH:mm") : "—";
-      const formattedLastOut = lastOut ? format(parseISO(lastOut), "HH:mm") : "—";
+      const formattedFirstIn = firstIn ? formatLocalTime(firstIn) : "—";
+      const formattedLastOut = lastOut ? formatLocalTime(lastOut) : "—";
 
       if (firstIn && lastOut) {
         const actualMins = differenceInMinutes(parseISO(lastOut), parseISO(firstIn));
