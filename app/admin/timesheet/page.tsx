@@ -91,44 +91,18 @@ export default async function TimesheetPage({
       const formattedLastOut = lastOut ? format(parseISO(lastOut), "HH:mm") : "—";
 
       if (firstIn && lastOut) {
-        completedShifts++;
-        
-        // Считаем часы
         const actualMins = differenceInMinutes(parseISO(lastOut), parseISO(firstIn));
         const actualHours = actualMins / 60;
-        
         totalWorkedHours += actualHours;
 
-        // Получаем базу из локации прихода
-        const locId = firstInRec?.location_id;
-        const baseHours = locId && locationMap[locId] ? locationMap[locId] : 8;
-        
-        let calculatedOvertime = 0;
-        if (emp.is_overtime_enabled !== false) {
-          // 1 час идет как обед, т.е. отнимаем (база + 1)
-          const rawOvertime = actualHours - (baseHours + 1);
-          if (rawOvertime > 0) {
-            // Переработки считаются только за целый час
-            calculatedOvertime = Math.floor(rawOvertime);
-          }
-        }
-        
-        let overtime = 0;
-        let requiresApproval = calculatedOvertime > 0;
-        let approvalStatus = 'none';
-
-        if (requiresApproval) {
-          const existingApproval = approvalsData?.find(a => a.employee_id === emp.id && a.record_date === day);
-          if (existingApproval) {
-            approvalStatus = existingApproval.status;
-            overtime = existingApproval.status === 'approved' ? (existingApproval.approved_hours || 0) : 0;
-          } else {
-            approvalStatus = 'pending';
-            overtime = 0; // Пока не одобрено админом, не начисляем
-          }
+        // Коэффициент смены (по умолчанию 1.0, админ может выбрать 0.5, 1.0, 1.5, 2.0)
+        let shiftMultiplier = 1.0;
+        const existingApproval = approvalsData?.find(a => a.employee_id === emp.id && a.record_date === day);
+        if (existingApproval && existingApproval.status === 'approved' && existingApproval.approved_hours > 0) {
+          shiftMultiplier = existingApproval.approved_hours;
         }
 
-        totalOvertimeHours += overtime;
+        completedShifts += shiftMultiplier;
 
         dailyDetails.push({ 
           day, 
@@ -138,10 +112,7 @@ export default async function TimesheetPage({
           firstIn, 
           lastOut, 
           actualHours,
-          calculatedOvertime,
-          overtime,
-          requiresApproval,
-          approvalStatus,
+          shiftMultiplier,
           status: 'complete' 
         });
       } else if (firstIn && !lastOut) {
@@ -155,18 +126,15 @@ export default async function TimesheetPage({
       }
     });
 
-    // Расчет ЗП с переработками
-    const hourlyRate = (emp.shift_rate || 0) / 8;
-    const basePay = completedShifts * (emp.shift_rate || 0);
-    const overtimePay = totalOvertimeHours * hourlyRate;
-    const totalEarned = (basePay + overtimePay).toFixed(0);
+    // Расчет ЗП с учетом коэффициента смен
+    const totalEarned = Math.round(completedShifts * (emp.shift_rate || 0));
 
     return {
       ...emp,
       completedShifts,
       totalWorkedHours,
-      overtimeHours: totalOvertimeHours,
-      totalEarned: parseInt(totalEarned),
+      overtimeHours: 0,
+      totalEarned: totalEarned,
       missingCheckouts,
       dailyDetails
     };

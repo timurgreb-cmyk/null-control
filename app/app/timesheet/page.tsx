@@ -234,8 +234,8 @@ export default async function EmployeeTimesheetPage({
             <p className="text-base font-black text-white">{completedShifts} смен</p>
           </div>
           <div className="border-l border-white/10 pl-2">
-            <p className="text-[10px] text-gray-300 font-semibold mb-0.5">ВСЕГО ЧАСОВ</p>
-            <p className="text-base font-black text-white">{totalWorkedHours.toFixed(0)} ч</p>
+            <p className="text-[10px] text-gray-300 font-semibold mb-0.5">СТАВКА ЗА СМЕНУ</p>
+            <p className="text-base font-black text-emerald-400">{shiftRate.toLocaleString("ru-RU")} ₸</p>
           </div>
         </div>
       </div>
@@ -303,11 +303,6 @@ export default async function EmployeeTimesheetPage({
                     <span className="text-gray-400 font-medium">Уход:</span>
                     <span className="font-bold text-gray-900">{shift.formattedLastOut}</span>
                   </div>
-                  {shift.status === 'complete' && (
-                    <span className="text-gray-400 font-bold ml-auto pl-2 border-l border-gray-200">
-                      {shift.actualHours} ч
-                    </span>
-                  )}
                 </div>
               </div>
             ))}
