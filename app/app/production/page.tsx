@@ -284,19 +284,50 @@ export default function ProductionPage() {
   }, [manualSearch]);
 
   return (
-    <div className="p-4 pt-6 max-w-md mx-auto pb-24">
+    <div className="p-4 pt-6 max-w-md mx-auto pb-28">
+      {/* Шапка */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Выработка продукции</h1>
-          <p className="text-gray-500 text-xs">Зафиксируйте выработанную выпечку за смену</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Выработка продукции</h1>
+          <p className="text-slate-500 text-xs mt-0.5">Фиксация выработанной выпечки за смену</p>
         </div>
         <button
           onClick={loadHistory}
-          className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl active:scale-95 transition-transform"
+          className="p-2.5 bg-white border border-slate-200/80 hover:bg-slate-50 text-slate-700 rounded-2xl shadow-sm active:scale-95 transition-all"
           title="Обновить список"
         >
-          <RefreshCw className="w-4 h-4" />
+          <RefreshCw className="w-4 h-4 text-primary" />
         </button>
+      </div>
+
+      {/* Главная карточка сводки выработки */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-primary/80 text-white rounded-3xl p-6 mb-6 shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-32 h-32 bg-primary/20 rounded-full blur-2xl pointer-events-none" />
+        
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-primary" />
+            Выработка за сегодня
+          </span>
+          <span className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+            {history.length} позиций
+          </span>
+        </div>
+
+        <div className="text-3xl font-black mb-5 tracking-tight">
+          {history.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0).toFixed(1).replace(/\.0$/, '')} <span className="text-lg font-bold text-slate-400">ед.</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-3 text-center">
+          <div>
+            <p className="text-[10px] text-slate-300 font-semibold mb-0.5">НАИМЕНОВАНИЙ</p>
+            <p className="text-base font-black text-white">{history.length} поз.</p>
+          </div>
+          <div className="border-l border-white/10 pl-2">
+            <p className="text-[10px] text-slate-300 font-semibold mb-0.5">СТАТУС СМЕНЫ</p>
+            <p className="text-base font-black text-emerald-400">Активна</p>
+          </div>
+        </div>
       </div>
 
       {error && (

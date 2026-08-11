@@ -95,14 +95,47 @@ export default async function TimesheetPage({
         const actualHours = actualMins / 60;
         totalWorkedHours += actualHours;
 
-        // Коэффициент смены (по умолчанию 1.0, админ может выбрать 0.5, 1.0, 1.5, 2.0)
+        const locId = firstInRec?.location_id;
+        const baseHours = locId && locationMap[locId] ? locationMap[locId] : 8;
+
+        let calculatedOvertime = 0;
+        if (emp.is_overtime_enabled !== false) {
+          const rawOvertime = actualHours - (baseHours + 1);
+          if (rawOvertime > 0) {
+            calculatedOvertime = Math.floor(rawOvertime);
+          }
+        }
+
         let shiftMultiplier = 1.0;
+        let overtimeHours = 0;
+        let creditType: 'multiplier' | 'hours' = 'multiplier';
+
         const existingApproval = approvalsData?.find(a => a.employee_id === emp.id && a.record_date === day);
-        if (existingApproval && existingApproval.status === 'approved' && existingApproval.approved_hours > 0) {
-          shiftMultiplier = existingApproval.approved_hours;
+        if (existingApproval && existingApproval.status === 'approved') {
+          const val = existingApproval.approved_hours || 0;
+          if (val === 5) {
+            shiftMultiplier = 0.5;
+            creditType = 'multiplier';
+          } else if (val === 15) {
+            shiftMultiplier = 1.5;
+            creditType = 'multiplier';
+          } else if (val === 20) {
+            shiftMultiplier = 2.0;
+            creditType = 'multiplier';
+          } else if (val === 10 || val === 1) {
+            shiftMultiplier = 1.0;
+            creditType = 'multiplier';
+          } else if (val > 100) {
+            overtimeHours = val - 100;
+            creditType = 'hours';
+          } else {
+            overtimeHours = val;
+            creditType = 'hours';
+          }
         }
 
         completedShifts += shiftMultiplier;
+        totalOvertimeHours += overtimeHours;
 
         dailyDetails.push({ 
           day, 
@@ -112,7 +145,10 @@ export default async function TimesheetPage({
           firstIn, 
           lastOut, 
           actualHours,
+          calculatedOvertime,
           shiftMultiplier,
+          overtimeHours,
+          creditType,
           status: 'complete' 
         });
       } else if (firstIn && !lastOut) {
@@ -126,14 +162,16 @@ export default async function TimesheetPage({
       }
     });
 
-    // Расчет ЗП с учетом коэффициента смен
-    const totalEarned = Math.round(completedShifts * (emp.shift_rate || 0));
+    const hourlyRate = (emp.shift_rate || 0) / 8;
+    const basePay = completedShifts * (emp.shift_rate || 0);
+    const overtimePay = totalOvertimeHours * hourlyRate;
+    const totalEarned = Math.round(basePay + overtimePay);
 
     return {
       ...emp,
       completedShifts,
       totalWorkedHours,
-      overtimeHours: 0,
+      overtimeHours: totalOvertimeHours,
       totalEarned: totalEarned,
       missingCheckouts,
       dailyDetails

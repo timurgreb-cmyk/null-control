@@ -111,23 +111,29 @@ export default async function EmployeeTimesheetPage({
     const locationName = (firstInRec?.locations as any)?.name || "Пекарня";
 
     if (firstIn && lastOut) {
-      completedShifts++;
       const actualMins = differenceInMinutes(parseISO(lastOut), parseISO(firstIn));
       const actualHours = actualMins / 60;
       totalWorkedHours += actualHours;
 
-      // Каждый час переработки начисляется ТОЛЬКО если он официально подтвержден админом
+      let shiftMultiplier = 1.0;
       let overtime = 0;
       const existingApproval = approvalsData?.find(a => a.record_date === day);
       if (existingApproval && existingApproval.status === 'approved') {
-        overtime = existingApproval.approved_hours || 0;
+        const val = existingApproval.approved_hours || 0;
+        if (val === 5) shiftMultiplier = 0.5;
+        else if (val === 15) shiftMultiplier = 1.5;
+        else if (val === 20) shiftMultiplier = 2.0;
+        else if (val === 10 || val === 1) shiftMultiplier = 1.0;
+        else if (val > 100) overtime = val - 100;
+        else overtime = val;
       }
 
+      completedShifts += shiftMultiplier;
       totalOvertimeHours += overtime;
 
       const shiftRate = profile?.shift_rate || 0;
       const hourlyRate = shiftRate / 8;
-      const shiftPay = shiftRate + (overtime * hourlyRate);
+      const shiftPay = Math.round((shiftMultiplier * shiftRate) + (overtime * hourlyRate));
 
       dailyShifts.push({
         day,
@@ -136,6 +142,8 @@ export default async function EmployeeTimesheetPage({
         formattedLastOut,
         locationName,
         actualHours: actualHours.toFixed(1),
+        shiftMultiplier,
+        overtimeHours: overtime,
         shiftPay,
         status: 'complete'
       });

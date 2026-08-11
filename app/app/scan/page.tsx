@@ -211,8 +211,8 @@ export default function ScanPage() {
               </button>
             </div>
 
-            {/* СИНЯЯ РАМКА СКАНЕРА */}
-            <div className="w-64 h-64 sm:w-72 sm:h-72 aspect-square relative flex-shrink-0 my-auto border-3 border-primary rounded-2xl shadow-[0_0_20px_rgba(37,99,235,0.4)]" />
+            {/* СИНЯЯ ТОЛСТАЯ РАМКА СКАНЕРА */}
+            <div className="w-64 h-64 sm:w-72 sm:h-72 aspect-square relative flex-shrink-0 my-auto border-[5px] border-primary rounded-3xl shadow-[0_0_25px_rgba(37,99,235,0.5)]" />
 
             {/* ИНТЕРАКТИВНАЯ ПАНЕЛЬ ПОД СКАНЕРОМ */}
             <div className="pointer-events-auto flex flex-col items-center gap-2.5 w-full max-w-xs">

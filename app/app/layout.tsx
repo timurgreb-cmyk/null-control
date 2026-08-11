@@ -46,7 +46,7 @@ export default function EmployeeLayout({
               );
             })()}
 
-            {/* 2. ВЫДЕЛЕННАЯ КНОПКА - СКАНЕР */}
+            {/* 2. ВЫДЕЛЕННАЯ КНОПКА - СКАНЕР (ОПУЩЕНА НИЖЕ) */}
             {(() => {
               const tab = tabs[1];
               const Icon = tab.icon;
@@ -56,7 +56,7 @@ export default function EmployeeLayout({
                   key={tab.name}
                   href={tab.href}
                   prefetch={true}
-                  className="relative flex flex-col items-center justify-center -top-4 active:scale-95 transition-transform"
+                  className="relative flex flex-col items-center justify-center -top-2 active:scale-95 transition-transform"
                 >
                   <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-md transition-all ${
                     isActive 
