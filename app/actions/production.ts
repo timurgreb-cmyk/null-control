@@ -40,6 +40,11 @@ const PRODUCT_CATALOG = `
 ЗАМОРОЗКА: Пирожки с картошкой 6шт, Пирожки лук яйцо 6шт, Пирожки с брынзой и шпинатом 6шт, Пирожки с картошкой и грибами 6шт, Самса 6шт, Учпучмаки 6шт, Сырники 12шт.
 `;
 
+function getAlmatyDateString(): string {
+  // Вычисляет YYYY-MM-DD строго в часовом поясе Алматы (Asia/Almaty) без смещения UTC
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Almaty' });
+}
+
 export async function uploadProductionLog(base64Image: string) {
   try {
     const { createClient: createSessionClient } = await import("@/utils/supabase/server");
@@ -51,9 +56,8 @@ export async function uploadProductionLog(base64Image: string) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return { success: false, error: "API ключ Gemini не настроен" };
 
-    // Извлекаем чистый base64 без data:image/jpeg;base64,
-    const base64Data = base64Image.split(',')[1];
-    const mimeType = base64Image.split(';')[0].split(':')[1] || "image/jpeg";
+    const base64Data = base64Image.split(',')[1] || base64Image;
+    const mimeType = base64Image.split(';')[0]?.split(':')[1] || "image/jpeg";
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -98,15 +102,12 @@ ${PRODUCT_CATALOG}
       return { success: false, error: "Не найдено данных о выработке на фото" };
     }
 
-    // Сохранение в Supabase
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Дата по Алматы
-    const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
-    const recordDate = almatyNow.toISOString().split('T')[0];
+    const recordDate = getAlmatyDateString();
 
     const inserts = parsedData.map((item: any) => {
       const qty = parseFloat(item.quantity) || 0;
@@ -122,12 +123,12 @@ ${PRODUCT_CATALOG}
 
     if (inserts.length === 0) return { success: false, error: "Распознаны невалидные данные" };
 
-    // Пробуем вставить с колонкой unit
-    let { error: insertError } = await supabaseAdmin
+    let insertedRecords = [];
+    let { data: insertResult, error: insertError } = await supabaseAdmin
       .from('production_logs')
-      .insert(inserts);
+      .insert(inserts)
+      .select('id, product_name, quantity, unit, created_at, record_date');
 
-    // Если нет колонки unit или тип integer, обрабатываем с фолбэком
     if (insertError) {
       const fallbackInserts = inserts.map(i => {
         let name = i.product_name;
@@ -142,16 +143,20 @@ ${PRODUCT_CATALOG}
         };
       });
 
-      const { error: retryError } = await supabaseAdmin
+      const { data: retryData, error: retryError } = await supabaseAdmin
         .from('production_logs')
-        .insert(fallbackInserts);
+        .insert(fallbackInserts)
+        .select('id, product_name, quantity, unit, created_at, record_date');
 
       if (retryError) {
         return { success: false, error: "Ошибка сохранения в базу: " + retryError.message };
       }
+      insertedRecords = retryData || [];
+    } else {
+      insertedRecords = insertResult || [];
     }
 
-    return { success: true, data: inserts };
+    return { success: true, data: insertedRecords.length > 0 ? insertedRecords : inserts };
 
   } catch (error: any) {
     console.error("Production Upload Exception:", error);
@@ -171,15 +176,26 @@ export async function getTodayProductionLogs() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
-    const recordDate = almatyNow.toISOString().split('T')[0];
+    const almatyDate = getAlmatyDateString();
     
-    const { data } = await supabaseAdmin
+    // Получаем записи за сегодня по Алматы или за последние 24 часа
+    const { data, error } = await supabaseAdmin
       .from('production_logs')
-      .select('id, product_name, quantity, unit, created_at')
+      .select('id, product_name, quantity, unit, created_at, record_date')
       .eq('employee_id', user.id)
-      .eq('record_date', recordDate)
+      .or(`record_date.eq.${almatyDate},created_at.gte.${new Date(Date.now() - 24 * 3600 * 1000).toISOString()}`)
       .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching logs, fallback to latest 100:", error);
+      const { data: fallbackData } = await supabaseAdmin
+        .from('production_logs')
+        .select('id, product_name, quantity, unit, created_at, record_date')
+        .eq('employee_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      return { success: true, data: fallbackData || [] };
+    }
 
     return { success: true, data: data || [] };
   } catch (err) {
@@ -201,7 +217,6 @@ export async function updateProductionLog(logId: string, productName: string, qu
 
     const numQty = Number(quantity);
 
-    // Пробуем обновить с колонкой unit
     let { error } = await supabaseAdmin
       .from('production_logs')
       .update({ product_name: productName, quantity: numQty, unit })
@@ -209,7 +224,6 @@ export async function updateProductionLog(logId: string, productName: string, qu
       .eq('employee_id', user.id);
 
     if (error) {
-      // Фолбэк если нет колонки unit или integer
       let finalName = productName;
       if (unit && unit !== "шт." && !finalName.includes(`(${unit})`)) {
         finalName = `${finalName} (${unit})`;
@@ -273,11 +287,10 @@ export async function addManualProductionLog(productName: string, quantity: numb
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const almatyNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Almaty" }));
-    const recordDate = almatyNow.toISOString().split('T')[0];
+    const recordDate = getAlmatyDateString();
 
-    // Пробуем вставить с unit
-    let { error } = await supabaseAdmin
+    let insertedRecord = null;
+    let { data, error } = await supabaseAdmin
       .from('production_logs')
       .insert({
         employee_id: user.id,
@@ -285,25 +298,31 @@ export async function addManualProductionLog(productName: string, quantity: numb
         quantity: numQty,
         unit: unit || "шт.",
         record_date: recordDate
-      });
+      })
+      .select('id, product_name, quantity, unit, created_at, record_date');
 
     if (error) {
       let finalName = productName;
       if (unit && unit !== "шт." && !finalName.includes(`(${unit})`)) {
         finalName = `${finalName} (${unit})`;
       }
-      const { error: retryError } = await supabaseAdmin
+      const { data: retryData, error: retryError } = await supabaseAdmin
         .from('production_logs')
         .insert({
           employee_id: user.id,
           product_name: finalName,
           quantity: error.message.includes("integer") ? Math.round(numQty) : numQty,
           record_date: recordDate
-        });
+        })
+        .select('id, product_name, quantity, unit, created_at, record_date');
 
       if (retryError) return { success: false, error: retryError.message };
+      insertedRecord = retryData?.[0];
+    } else {
+      insertedRecord = data?.[0];
     }
-    return { success: true };
+
+    return { success: true, data: insertedRecord };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

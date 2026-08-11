@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Camera, Loader2, CheckCircle2, AlertCircle, Clock, Pencil, Trash2, X, Check, Search, PlusCircle, Image as ImageIcon } from "lucide-react";
+import { Camera, Loader2, CheckCircle2, AlertCircle, Clock, Pencil, Trash2, X, Check, Search, PlusCircle, Image as ImageIcon, RefreshCw } from "lucide-react";
 import { uploadProductionLog, getTodayProductionLogs, updateProductionLog, deleteProductionLog, addManualProductionLog } from "@/app/actions/production";
 
 const ALL_PRODUCTS = [
@@ -35,6 +35,8 @@ const ALL_PRODUCTS = [
   "Пирожки с картошкой и грибами 6шт (заморозка)", "Самса 6шт (заморозка)", "Учпучмаки 6шт (заморозка)", "Сырники 12шт (заморозка)"
 ];
 
+const UNITS = ["шт.", "кг", "г", "л", "мл", "упк", "порц"];
+
 export default function ProductionPage() {
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState("");
@@ -54,18 +56,39 @@ export default function ProductionPage() {
   const [manualUnit, setManualUnit] = useState("шт.");
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const UNITS = ["шт.", "кг", "г", "л", "мл", "упк", "порц"];
-
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const saveHistoryToCache = (data: any[]) => {
+    try {
+      localStorage.setItem("app_prod_history", JSON.stringify(data));
+    } catch (_) {}
+  };
 
   const loadHistory = async () => {
     const res = await getTodayProductionLogs();
-    if (res.success) {
-      setHistory(res.data);
+    if (res.success && Array.isArray(res.data)) {
+      setHistory(prev => {
+        const newMap = new Map();
+        res.data.forEach(item => newMap.set(item.id, item));
+        prev.forEach(item => {
+          if (item.id.startsWith("temp-") && !res.data.some(s => s.product_name === item.product_name && s.quantity === item.quantity)) {
+            newMap.set(item.id, item);
+          }
+        });
+        const merged = Array.from(newMap.values());
+        saveHistoryToCache(merged);
+        return merged;
+      });
     }
   };
 
   useEffect(() => {
+    try {
+      const cached = localStorage.getItem("app_prod_history");
+      if (cached) {
+        setHistory(JSON.parse(cached));
+      }
+    } catch (_) {}
     loadHistory();
   }, []);
 
@@ -116,11 +139,21 @@ export default function ProductionPage() {
         const compressedBase64 = canvas.toDataURL("image/jpeg", 0.6);
 
         try {
-          setLoadingStep("Распознавание почерка ИИ...");
+          setLoadingStep("Распознавание ИИ...");
           const res = await uploadProductionLog(compressedBase64);
           if (res.success) {
             setSuccess(true);
             setResult(res.data || []);
+            if (Array.isArray(res.data) && res.data.length > 0) {
+              const resData = res.data;
+              setHistory(prev => {
+                const existingIds = new Set(prev.map(i => i.id));
+                const toAdd = resData.filter((i: any) => i.id && !existingIds.has(i.id));
+                const updated = [...toAdd, ...prev];
+                saveHistoryToCache(updated);
+                return updated;
+              });
+            }
             loadHistory();
           } else {
             setError(res.error || "Ошибка распознавания");
@@ -164,17 +197,20 @@ export default function ProductionPage() {
     const previousHistory = [...history];
     const numQty = Number(editQty);
 
-    setHistory(prev => prev.map(item => 
+    const updatedHistory = history.map(item => 
       item.id === editingId 
         ? { ...item, product_name: editName, quantity: numQty, unit: editUnit } 
         : item
-    ));
+    );
+    setHistory(updatedHistory);
+    saveHistoryToCache(updatedHistory);
     setEditingId(null);
 
     const res = await updateProductionLog(editingId, editName, numQty, editUnit);
     if (!res.success) {
       setError(res.error || "Ошибка обновления");
       setHistory(previousHistory);
+      saveHistoryToCache(previousHistory);
     }
   };
 
@@ -182,12 +218,15 @@ export default function ProductionPage() {
     if (!confirm("Удалить эту запись?")) return;
     const previousHistory = [...history];
 
-    setHistory(prev => prev.filter(item => item.id !== id));
+    const updatedHistory = history.filter(item => item.id !== id);
+    setHistory(updatedHistory);
+    saveHistoryToCache(updatedHistory);
 
     const res = await deleteProductionLog(id);
     if (!res.success) {
       setError(res.error || "Ошибка удаления");
       setHistory(previousHistory);
+      saveHistoryToCache(previousHistory);
     }
   };
 
@@ -211,17 +250,28 @@ export default function ProductionPage() {
       created_at: new Date().toISOString()
     };
 
-    setHistory(prev => [optimisticRecord, ...prev]);
+    const newHistory = [optimisticRecord, ...history];
+    setHistory(newHistory);
+    saveHistoryToCache(newHistory);
+
     setManualSearch("");
     setManualQty("");
     setShowManualForm(false);
 
     const res = await addManualProductionLog(productName, quantity, manualUnit);
     if (res.success) {
+      if (res.data && res.data.id) {
+        setHistory(prev => {
+          const replaced = prev.map(item => item.id === tempId ? res.data : item);
+          saveHistoryToCache(replaced);
+          return replaced;
+        });
+      }
       loadHistory();
     } else {
       setError(res.error || "Ошибка сохранения");
       setHistory(previousHistory);
+      saveHistoryToCache(previousHistory);
     }
   };
 
@@ -234,19 +284,30 @@ export default function ProductionPage() {
   }, [manualSearch]);
 
   return (
-    <div className="p-4 pt-8 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Выработка продукции</h1>
-      <p className="text-gray-500 mb-8 text-sm">Сфотографируйте рукописный лист с вашей выработкой за смену или внесите данные вручную.</p>
+    <div className="p-4 pt-6 max-w-md mx-auto pb-24">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Выработка продукции</h1>
+          <p className="text-gray-500 text-xs">Зафиксируйте выработанную выпечку за смену</p>
+        </div>
+        <button
+          onClick={loadHistory}
+          className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl active:scale-95 transition-transform"
+          title="Обновить список"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+      </div>
 
       {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-2xl mb-6 flex items-start border border-red-100">
-          <AlertCircle className="w-5 h-5 mr-3 shrink-0 mt-0.5" />
-          <p className="text-sm">{error}</p>
+        <div className="bg-red-50 text-red-700 p-4 rounded-2xl mb-6 flex items-start border border-red-100 shadow-sm animate-in fade-in">
+          <AlertCircle className="w-5 h-5 mr-3 shrink-0 mt-0.5 text-red-500" />
+          <p className="text-sm font-medium">{error}</p>
         </div>
       )}
 
       {success && (
-        <div className="bg-green-50 text-green-800 p-4 rounded-2xl mb-6 border border-green-100">
+        <div className="bg-green-50 text-green-800 p-4 rounded-2xl mb-6 border border-green-100 shadow-sm animate-in fade-in">
           <div className="flex items-center mb-3">
             <CheckCircle2 className="w-6 h-6 mr-2 text-green-500" />
             <span className="font-bold">Успешно распознано!</span>
@@ -255,20 +316,20 @@ export default function ProductionPage() {
             <ul className="space-y-2 text-sm">
               {result.map((item, idx) => (
                 <li key={idx} className="flex justify-between border-b border-gray-50 last:border-0 pb-2 last:pb-0">
-                  <span className="text-gray-600">{item.product_name}</span>
-                  <span className="font-bold">{item.quantity} {item.unit || "шт."}</span>
+                  <span className="text-gray-700 font-medium">{item.product_name}</span>
+                  <span className="font-black text-green-700 bg-green-50 px-2 py-0.5 rounded-lg">{item.quantity} {item.unit || "шт."}</span>
                 </li>
               ))}
             </ul>
           </div>
-          <p className="text-xs text-green-600 mt-3 text-center">Данные сохранены в систему</p>
+          <p className="text-xs text-green-600 mt-2.5 text-center font-medium">Данные упешно сохранены</p>
         </div>
       )}
 
       {!loading ? (
-        <div className="space-y-4 mb-8">
-          {/* 1. Главная кнопка - Сделать фото на камеру */}
-          <div className="relative">
+        <div className="space-y-3 mb-6">
+          {/* Главная кнопка - Камера */}
+          <div className="relative group">
             <input
               type="file"
               accept="image/*"
@@ -276,18 +337,17 @@ export default function ProductionPage() {
               onChange={handleCapture}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
-            <div className="bg-primary hover:bg-primary/95 transition-colors text-white rounded-3xl p-6 flex flex-col items-center justify-center shadow-lg shadow-primary/20 active:scale-98 transition-transform">
-              <div className="bg-white/20 p-3 rounded-full mb-3">
+            <div className="bg-primary hover:bg-primary/95 text-white rounded-3xl p-6 flex flex-col items-center justify-center shadow-lg shadow-primary/25 active:scale-[0.98] transition-all">
+              <div className="bg-white/20 p-3.5 rounded-2xl mb-3">
                 <Camera className="w-8 h-8" />
               </div>
-              <span className="font-bold text-lg">Сделать фото камеры</span>
-              <span className="text-primary-foreground/70 text-xs mt-1">Прямой запуск камеры телефона</span>
+              <span className="font-black text-lg">Сделать фото отчета</span>
+              <span className="text-white/80 text-xs mt-1">Распознавание рукописного текста ИИ</span>
             </div>
           </div>
 
-          {/* 2. Две кнопки в ряд - Галерея и Ручной ввод */}
+          {/* Галерея и Ручной ввод */}
           <div className="grid grid-cols-2 gap-3">
-            {/* Кнопка галереи */}
             <div className="relative">
               <input
                 type="file"
@@ -295,61 +355,62 @@ export default function ProductionPage() {
                 onChange={handleCapture}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
               />
-              <div className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm active:scale-95 transition-all text-center">
-                <ImageIcon className="w-6 h-6 text-gray-500 mb-2" />
-                <span className="font-bold text-sm">Из галереи</span>
+              <div className="bg-white border border-gray-200 text-gray-800 hover:bg-gray-50 rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm active:scale-95 transition-all text-center">
+                <ImageIcon className="w-6 h-6 text-gray-500 mb-1.5" />
+                <span className="font-bold text-xs">Загрузить фото</span>
               </div>
             </div>
 
-            {/* Кнопка ручного ввода */}
             <button
               onClick={() => setShowManualForm(!showManualForm)}
               className={`border rounded-2xl p-4 flex flex-col items-center justify-center shadow-sm active:scale-95 transition-all text-center ${
                 showManualForm 
                   ? "bg-primary/10 border-primary text-primary" 
-                  : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                  : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
               }`}
             >
-              <PlusCircle className={`w-6 h-6 mb-2 ${showManualForm ? "text-primary" : "text-gray-500"}`} />
-              <span className="font-bold text-sm">Вписать вручную</span>
+              <PlusCircle className={`w-6 h-6 mb-1.5 ${showManualForm ? "text-primary" : "text-gray-500"}`} />
+              <span className="font-bold text-xs">Внести вручную</span>
             </button>
           </div>
         </div>
       ) : (
-        /* Лоадер с шагами */
-        <div className="bg-white border border-gray-100 rounded-3xl p-10 flex flex-col items-center justify-center shadow-sm mb-8">
-          <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+        <div className="bg-white border border-gray-100 rounded-3xl p-8 flex flex-col items-center justify-center shadow-sm mb-6">
+          <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
           <span className="font-bold text-gray-900">{loadingStep || "Анализ изображения..."}</span>
-          <span className="text-gray-500 text-sm mt-2 text-center">Интеллектуальное распознавание рукописного текста</span>
+          <span className="text-gray-400 text-xs mt-1">ИИ распознает позиции с вашего фото</span>
         </div>
       )}
 
-      {/* Форма ручного ввода с автокомплитом и выбором ед. изм */}
+      {/* Форма ручного ввода */}
       {showManualForm && !loading && (
-        <form onSubmit={handleManualAdd} className="bg-white border border-gray-100 rounded-2xl p-5 mb-8 shadow-sm space-y-4 transition-all duration-300">
-          <h3 className="font-bold text-gray-900 border-b border-gray-50 pb-2">Ручной ввод выработки</h3>
+        <form onSubmit={handleManualAdd} className="bg-white border border-gray-100 rounded-3xl p-5 mb-6 shadow-md space-y-4 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+            <h3 className="font-bold text-gray-900 text-sm">Ручной ввод выработки</h3>
+            <button type="button" onClick={() => setShowManualForm(false)} className="text-gray-400 p-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
           
-          {/* Поле поиска товара */}
           <div className="relative" ref={dropdownRef}>
-            <label className="text-xs text-gray-400 font-bold block mb-1">НАЗВАНИЕ ПРОДУКЦИИ</label>
+            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">НАЗВАНИЕ ПРОДУКЦИИ</label>
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Начните вводить (например: Самса)..."
+                placeholder="Поиск по справочнику..."
                 value={manualSearch}
                 onChange={(e) => {
                   setManualSearch(e.target.value);
                   setShowDropdown(true);
                 }}
                 onFocus={() => setShowDropdown(true)}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none bg-gray-50/50"
               />
             </div>
 
-            {/* Выпадающий список совпадений */}
             {showDropdown && manualSearch && (
-              <div className="absolute w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-gray-50">
+              <div className="absolute w-full mt-1 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-gray-50">
                 {filteredProducts.length > 0 ? (
                   filteredProducts.map((product) => (
                     <button
@@ -359,40 +420,39 @@ export default function ProductionPage() {
                         setManualSearch(product);
                         setShowDropdown(false);
                       }}
-                      className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 text-gray-700 active:bg-gray-100 transition-colors"
+                      className="w-full text-left px-4 py-3 text-sm hover:bg-primary/5 text-gray-700 font-medium active:bg-gray-100 transition-colors"
                     >
                       {product}
                     </button>
                   ))
                 ) : (
-                  <div className="px-4 py-3 text-sm text-gray-400 italic">
-                    Нет совпадений в справочнике
+                  <div className="px-4 py-3 text-xs text-gray-400 italic">
+                    Совпадений не найдено, будет добавлено указанное имя
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Количество и Единица измерения */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-gray-400 font-bold block mb-1">КОЛИЧЕСТВО</label>
+              <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">КОЛИЧЕСТВО</label>
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
-                placeholder="например: 1.5"
+                placeholder="1.5"
                 value={manualQty}
                 onChange={(e) => setManualQty(e.target.value === "" ? "" : Number(e.target.value))}
-                className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                className="w-full p-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none font-bold bg-gray-50/50"
               />
             </div>
             <div>
-              <label className="text-xs text-gray-400 font-bold block mb-1">ЕД. ИЗМЕРЕНИЯ</label>
+              <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">ЕД. ИЗМЕРЕНИЯ</label>
               <select
                 value={manualUnit}
                 onChange={(e) => setManualUnit(e.target.value)}
-                className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-primary focus:outline-none font-bold text-gray-700"
+                className="w-full p-3 border border-gray-200 rounded-xl text-sm bg-gray-50/50 focus:ring-2 focus:ring-primary focus:outline-none font-bold text-gray-700"
               >
                 {UNITS.map(u => (
                   <option key={u} value={u}>{u}</option>
@@ -401,7 +461,6 @@ export default function ProductionPage() {
             </div>
           </div>
 
-          {/* Кнопки выбора ед. изм. в 1 клик */}
           <div className="flex flex-wrap gap-1.5 pt-1">
             {UNITS.map((u) => (
               <button
@@ -419,13 +478,12 @@ export default function ProductionPage() {
             ))}
           </div>
 
-          {/* Кнопки управления формы */}
           <div className="flex gap-2 pt-2">
             <button
               type="submit"
-              className="flex-1 py-3 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/95 active:scale-95 transition-transform"
+              className="flex-1 py-3.5 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/95 active:scale-95 transition-all shadow-md shadow-primary/20"
             >
-              Добавить в систему
+              Сохранить
             </button>
             <button
               type="button"
@@ -434,7 +492,7 @@ export default function ProductionPage() {
                 setManualSearch("");
                 setManualQty("");
               }}
-              className="px-4 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-200 active:scale-95 transition-transform"
+              className="px-4 py-3.5 bg-gray-100 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-200 active:scale-95 transition-all"
             >
               Отмена
             </button>
@@ -442,30 +500,32 @@ export default function ProductionPage() {
         </form>
       )}
 
-      {/* История за сегодня */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="bg-gray-50 px-5 py-4 border-b border-gray-100 flex items-center">
-          <Clock className="w-5 h-5 text-gray-400 mr-2" />
-          <h2 className="font-bold text-gray-900">Загружено сегодня</h2>
+      {/* История выработки */}
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-gray-50/80 px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-gray-400" />
+            <h2 className="font-bold text-gray-900 text-sm">Выработка за сегодня</h2>
+          </div>
           {history.length > 0 && (
-            <span className="ml-auto bg-primary/10 text-primary text-xs px-2.5 py-1 rounded-full font-bold">
+            <span className="bg-primary/10 text-primary text-xs px-2.5 py-0.5 rounded-full font-bold">
               {history.length}
             </span>
           )}
         </div>
 
         {history.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 text-sm">
-            Вы еще ничего не загружали сегодня
+          <div className="p-8 text-center text-gray-400 text-xs">
+            Записей выработки пока нет
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-gray-100">
             {history.map((item) => {
-              const time = new Date(item.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+              const time = item.created_at ? new Date(item.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : "Сейчас";
               const isEditing = editingId === item.id;
 
               return (
-                <div key={item.id} className="p-4">
+                <div key={item.id} className="p-4 hover:bg-gray-50/50 transition-colors">
                   {isEditing ? (
                     <div className="space-y-3">
                       <input
@@ -482,7 +542,7 @@ export default function ProductionPage() {
                           min="0.01"
                           value={editQty}
                           onChange={(e) => setEditQty(e.target.value === "" ? "" : Number(e.target.value))}
-                          className="w-24 p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                          className="w-24 p-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary focus:outline-none font-bold"
                           placeholder="Кол-во"
                         />
                         <select
@@ -494,16 +554,18 @@ export default function ProductionPage() {
                             <option key={u} value={u}>{u}</option>
                           ))}
                         </select>
-                        <div className="ml-auto flex gap-2">
+                        <div className="ml-auto flex gap-1.5">
                           <button
                             onClick={handleSaveEdit}
-                            className="p-2 bg-green-100 text-green-700 rounded-lg active:scale-95 transition-transform"
+                            className="p-2 bg-green-500 text-white rounded-lg active:scale-95 transition-transform"
+                            title="Сохранить"
                           >
                             <Check className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setEditingId(null)}
                             className="p-2 bg-gray-100 text-gray-500 rounded-lg active:scale-95 transition-transform"
+                            title="Отмена"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -511,24 +573,26 @@ export default function ProductionPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 truncate">{item.product_name}</p>
-                        <p className="text-xs text-gray-400">{time}</p>
+                        <p className="font-bold text-gray-900 text-sm truncate">{item.product_name}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{time}</p>
                       </div>
-                      <div className="flex items-center gap-2 ml-3">
-                        <div className="bg-primary/10 text-primary font-bold px-3 py-1.5 rounded-lg text-sm whitespace-nowrap">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="bg-primary/10 text-primary font-black px-3 py-1.5 rounded-xl text-xs whitespace-nowrap">
                           {item.quantity} {item.unit || "шт."}
-                        </div>
+                        </span>
                         <button
                           onClick={() => handleEdit(item)}
                           className="p-2 text-gray-400 hover:text-primary active:scale-95 transition-all"
+                          title="Редактировать"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
                           className="p-2 text-gray-400 hover:text-red-500 active:scale-95 transition-all"
+                          title="Удалить"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
