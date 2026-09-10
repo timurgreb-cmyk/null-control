@@ -13,7 +13,7 @@ type ScanStatus = "idle" | "scanning" | "processing" | "success" | "error";
 export default function ScanPage() {
   const [status, setStatus] = useState<ScanStatus>("scanning");
   const [message, setMessage] = useState<string>("");
-  const [resultData, setResultData] = useState<{type: string, location: string} | null>(null);
+  const [resultData, setResultData] = useState<{type: string, location: string, title?: string} | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraKey, setCameraKey] = useState(0);
   const [torchOn, setTorchOn] = useState(false);
@@ -110,19 +110,15 @@ export default function ScanPage() {
         setStatus("success");
         setResultData({
           type: result.data.type,
-          location: result.data.locationName
+          location: result.data.locationName,
+          title: result.data.type === "check_in" ? "Хорошей смены! 🎉" : "Хорошей дороги домой! 🏠"
         });
-        setMessage(result.data.message || (result.data.type === "check_in" ? "Приход успешно отмечен!" : "Уход успешно отмечен!"));
+        setMessage(result.data.type === "check_in" ? "Приход на смену успешно отмечен!" : "Уход со смены успешно отмечен!");
       } else {
         setStatus("error");
         setMessage(result.error || "Ошибка сканирования");
       }
-
-      setTimeout(() => {
-        setStatus("scanning");
-        setMessage("");
-        setResultData(null);
-      }, 4000);
+      // Окно остаётся на экране до нажатия кнопки пользователем!
     }
   };
 
@@ -134,8 +130,15 @@ export default function ScanPage() {
     if (errorMessage.includes("Permission") || errorMessage.includes("NotAllowedError")) {
       setMessage("Доступ к камере запрещен. Разрешите использование камеры в настройках браузера.");
     } else {
-      setMessage(`Ошибка камеры. Нажмите кнопку ниже для повторной попытки.`);
+      setMessage(`Ошибка запуска камеры. Нажмите «Перезапустить» ниже.`);
     }
+  };
+
+  const dismissModal = () => {
+    setStatus("scanning");
+    setMessage("");
+    setResultData(null);
+    setCameraActive(true);
   };
 
   return (
@@ -147,16 +150,13 @@ export default function ScanPage() {
           return (
             <Scanner
               key={cameraKey}
-              delay={150}
+              delay={250}
               style={{ height: "100%", width: "100%", objectFit: "cover" }}
               onError={handleError}
               onScan={handleScan}
               constraints={{
                 video: { 
-                  facingMode: { ideal: "environment" },
-                  width: { min: 640, ideal: 1280 },
-                  height: { min: 480, ideal: 720 },
-                  advanced: [{ focusMode: "continuous" }] as any
+                  facingMode: "environment"
                 }
               }}
             />
@@ -226,7 +226,7 @@ export default function ScanPage() {
                 className="bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 border border-white/10 backdrop-blur-md"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                Перезапустить
+                Перезапустить камеру
               </button>
             </div>
 
@@ -236,7 +236,7 @@ export default function ScanPage() {
         {/* Оверлей загрузки */}
         {status === "processing" && (
           <div className="absolute inset-0 bg-slate-950/85 z-30 flex flex-col items-center justify-center p-6 text-center">
-            <div className="bg-slate-900 border border-slate-800 p-7 rounded-3xl shadow-2xl flex flex-col items-center max-w-xs w-full">
+            <div className="bg-slate-900 border border-slate-800 p-7 rounded-3xl shadow-2xl flex flex-col items-center max-w-xs w-full animate-in fade-in zoom-in-95 duration-200">
               <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
               <p className="text-white font-bold text-base">Отметка смены...</p>
               <p className="text-slate-400 text-xs mt-1">Проверяем координаты</p>
@@ -244,47 +244,52 @@ export default function ScanPage() {
           </div>
         )}
 
-        {/* Оверлей Успеха */}
+        {/* Оверлей Успеха («Хорошей смены» + кнопка «Хорошо») */}
         {status === "success" && (
           <div className="absolute inset-0 bg-slate-950/90 z-30 flex flex-col items-center justify-center p-6 text-center">
             <div className="bg-white w-full max-w-sm rounded-3xl p-7 shadow-2xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
-              <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mb-5 shadow-lg shadow-emerald-500/30">
+              <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-emerald-500/30">
                 <CheckCircle2 className="w-9 h-9 text-white" />
               </div>
-              <h2 className="text-xl font-black text-slate-900 mb-2">{message}</h2>
+              <h2 className="text-2xl font-black text-slate-900 mb-1">{resultData?.title || "Хорошей смены!"}</h2>
+              <p className="text-slate-600 text-xs font-semibold mb-5">{message}</p>
+              
               {resultData && (
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl py-2.5 px-4 w-full mb-5">
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl py-3 px-4 w-full mb-6 text-left">
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Локация</p>
-                  <p className="text-slate-900 font-bold text-sm">{resultData.location}</p>
+                  <p className="text-slate-900 font-bold text-sm flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-primary shrink-0" />
+                    {resultData.location}
+                  </p>
                 </div>
               )}
+
               <button 
-                onClick={() => setStatus("scanning")}
-                className="w-full bg-emerald-500 text-white py-3.5 rounded-2xl font-bold shadow-md active:scale-95 transition-all"
+                onClick={dismissModal}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-black text-base shadow-lg shadow-emerald-500/25 active:scale-95 transition-all"
               >
-                Отлично
+                Хорошо
               </button>
             </div>
           </div>
         )}
 
-        {/* Оверлей Ошибки */}
+        {/* Оверлей Ошибки + кнопка «Хорошо» */}
         {status === "error" && (
           <div className="absolute inset-0 bg-slate-950/90 z-30 flex flex-col items-center justify-center p-6 text-center">
             <div className="bg-white w-full max-w-sm rounded-3xl p-7 shadow-2xl flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
-              <div className="w-16 h-16 bg-rose-500 rounded-full flex items-center justify-center mb-5 shadow-lg shadow-rose-500/30">
+              <div className="w-16 h-16 bg-rose-500 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-rose-500/30">
                 <XCircle className="w-9 h-9 text-white" />
               </div>
-              <h2 className="text-lg font-bold text-slate-900 mb-2">Ошибка сканирования</h2>
-              <p className="text-slate-500 text-xs font-medium mb-5 leading-relaxed">{message}</p>
+              <h2 className="text-xl font-black text-slate-900 mb-2">Ошибка отметки</h2>
+              <p className="text-slate-600 text-xs font-medium mb-6 leading-relaxed bg-rose-50 border border-rose-100 p-3.5 rounded-2xl w-full">
+                {message}
+              </p>
               <button 
-                onClick={() => {
-                  setStatus("scanning");
-                  setCameraActive(true);
-                }}
-                className="w-full bg-rose-500 text-white py-3.5 rounded-2xl font-bold shadow-md active:scale-95 transition-all"
+                onClick={dismissModal}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-bold text-base shadow-md active:scale-95 transition-all"
               >
-                Попробовать снова
+                Хорошо
               </button>
             </div>
           </div>

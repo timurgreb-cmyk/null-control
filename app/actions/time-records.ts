@@ -3,6 +3,9 @@
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
+import { sendTelegramNotification } from "@/utils/telegram";
+import { formatLocalTime } from "@/utils/date";
+
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -47,6 +50,21 @@ async function logScanError(supabaseAdmin: any, {
       user_longitude: userLng || null,
       distance_meters: distanceMeters !== undefined && distanceMeters !== null ? Math.round(distanceMeters) : null
     });
+
+    let empName = "Сотрудник";
+    if (employeeId) {
+      const { data: p } = await supabaseAdmin.from("profiles").select("full_name").eq("id", employeeId).single();
+      if (p?.full_name) empName = p.full_name;
+    }
+
+    const timeStr = formatLocalTime(new Date().toISOString());
+    await sendTelegramNotification(
+      `⚠️ <b>ОШИБКА СКАНИРОВАНИЯ</b>\n\n` +
+      `👤 <b>Сотрудник:</b> ${empName}\n` +
+      `❌ <b>Причина:</b> ${errorMessage}\n` +
+      (distanceMeters !== undefined && distanceMeters !== null ? `📍 <b>Дистанция:</b> ${Math.round(distanceMeters)} м\n` : ``) +
+      `🕒 <b>Время:</b> ${timeStr}`
+    );
   } catch (err) {
     // Игнорируем если таблица еще не создана
   }
@@ -273,6 +291,35 @@ export async function processQRScan(
 
     if (insertError) {
       return { success: false, error: `Ошибка записи: ${insertError.message}` };
+    }
+
+    // 6. Отправка уведомления в Telegram-канал/чат руководителя
+    try {
+      let distanceNum: number | null = null;
+      if (locLat !== null && locLng !== null && userCoords?.lat && userCoords?.lng) {
+        distanceNum = calculateDistanceMeters(userCoords.lat, userCoords.lng, locLat, locLng);
+      }
+
+      const timeStr = formatLocalTime(now.toISOString());
+      if (newRecordType === "check_in") {
+        await sendTelegramNotification(
+          `🟢 <b>ПРИХОД НА СМЕНУ</b>\n\n` +
+          `👤 <b>Сотрудник:</b> ${userProfile?.full_name || "Сотрудник"}\n` +
+          `📍 <b>Локация:</b> ${location.name}\n` +
+          `🕒 <b>Время:</b> ${timeStr}\n` +
+          (distanceNum !== null ? `📍 <b>GPS дистанция:</b> ${Math.round(distanceNum)} м` : ``)
+        );
+      } else {
+        await sendTelegramNotification(
+          `🔴 <b>УХОД СО СМЕНЫ</b>\n\n` +
+          `👤 <b>Сотрудник:</b> ${userProfile?.full_name || "Сотрудник"}\n` +
+          `📍 <b>Локация:</b> ${location.name}\n` +
+          `🕒 <b>Время:</b> ${timeStr}\n` +
+          (distanceNum !== null ? `📍 <b>GPS дистанция:</b> ${Math.round(distanceNum)} м` : ``)
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to send telegram notification:", e);
     }
 
     const { revalidatePath } = await import("next/cache");
