@@ -156,14 +156,15 @@ export async function processQRScan(
     const locLng = location.longitude ? parseFloat(location.longitude) : null;
     const allowedRadius = location.radius_meters ? parseInt(location.radius_meters) : 200;
 
-    // Проверяем профиль сотрудника на освобождение от гео-контроля (Евдокия / Huawei)
+    // Проверяем профиль сотрудника на освобождение от гео-контроля (Тимур)
     const { data: userProfile } = await supabaseAdmin
       .from("profiles")
       .select("full_name, id")
       .eq("id", user.id)
       .single();
 
-    const isGeoExempt = userProfile?.id === "23f4e009-d729-44d7-be93-a6a0cf3b4629" || 
+    const isGeoExempt = userProfile?.full_name?.toLowerCase().includes("тимур") ||
+                        userProfile?.id === "23f4e009-d729-44d7-be93-a6a0cf3b4629" || 
                         userProfile?.full_name?.toLowerCase().includes("евдокия");
 
     if (locLat !== null && locLng !== null && location.is_geo_required !== false && !isGeoExempt) {
@@ -300,22 +301,46 @@ export async function processQRScan(
         distanceNum = calculateDistanceMeters(userCoords.lat, userCoords.lng, locLat, locLng);
       }
 
+      const dateFormatted = new Intl.DateTimeFormat('ru-RU', { 
+        timeZone: 'Asia/Almaty', 
+        day: 'numeric', 
+        month: 'long', 
+        year: 'numeric',
+        weekday: 'short' 
+      }).format(now);
+
       const timeStr = formatLocalTime(now.toISOString());
+      const empName = userProfile?.full_name || "Сотрудник";
+
       if (newRecordType === "check_in") {
         await sendTelegramNotification(
           `🟢 <b>ПРИХОД НА СМЕНУ</b>\n\n` +
-          `👤 <b>Сотрудник:</b> ${userProfile?.full_name || "Сотрудник"}\n` +
+          `👤 <b>Сотрудник:</b> ${empName}\n` +
+          `📅 <b>Дата:</b> ${dateFormatted}\n` +
+          `🕒 <b>Время прихода:</b> ${timeStr}\n` +
           `📍 <b>Локация:</b> ${location.name}\n` +
-          `🕒 <b>Время:</b> ${timeStr}\n` +
-          (distanceNum !== null ? `📍 <b>GPS дистанция:</b> ${Math.round(distanceNum)} м` : ``)
+          (distanceNum !== null ? `📱 <b>GPS дистанция:</b> ${Math.round(distanceNum)} м` : ``)
         );
       } else {
+        const checkInTimeStr = lastRecord?.recorded_at ? formatLocalTime(lastRecord.recorded_at) : "—";
+        let durationStr = "";
+        if (lastRecord?.recorded_at) {
+          const checkInMs = new Date(lastRecord.recorded_at).getTime();
+          const diffMins = Math.max(0, Math.round((now.getTime() - checkInMs) / (1000 * 60)));
+          const hrs = Math.floor(diffMins / 60);
+          const mins = diffMins % 60;
+          durationStr = `${hrs} ч ${mins} мин`;
+        }
+
         await sendTelegramNotification(
           `🔴 <b>УХОД СО СМЕНЫ</b>\n\n` +
-          `👤 <b>Сотрудник:</b> ${userProfile?.full_name || "Сотрудник"}\n` +
+          `👤 <b>Сотрудник:</b> ${empName}\n` +
+          `📅 <b>Дата:</b> ${dateFormatted}\n` +
+          `🟢 <b>Время прихода:</b> ${checkInTimeStr}\n` +
+          `🔴 <b>Время ухода:</b> ${timeStr}\n` +
+          (durationStr ? `⏱ <b>Отработано:</b> ${durationStr}\n` : ``) +
           `📍 <b>Локация:</b> ${location.name}\n` +
-          `🕒 <b>Время:</b> ${timeStr}\n` +
-          (distanceNum !== null ? `📍 <b>GPS дистанция:</b> ${Math.round(distanceNum)} м` : ``)
+          (distanceNum !== null ? `📱 <b>GPS дистанция:</b> ${Math.round(distanceNum)} м` : ``)
         );
       }
     } catch (e) {
