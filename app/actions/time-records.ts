@@ -78,8 +78,8 @@ export async function processQRScan(
   try {
     const supabase = createClient();
     
-    // Используем переданное время или серверное как запасной вариант
-    const now = clientTimeIso ? new Date(clientTimeIso) : new Date();
+    // Используем серверное время (UTC), чтобы не зависеть от старых версий прошивок телефонов
+    const now = new Date();
     
     // Проверка авторизации
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -156,7 +156,7 @@ export async function processQRScan(
     const locLng = location.longitude ? parseFloat(location.longitude) : null;
     const allowedRadius = location.radius_meters ? parseInt(location.radius_meters) : 200;
 
-    // Проверяем профиль сотрудника на освобождение от гео-контроля (Тимур)
+    // Проверяем профиль сотрудника на освобождение от гео-контроля (Тимур, Люба, Евдокия)
     const { data: userProfile } = await supabaseAdmin
       .from("profiles")
       .select("full_name, id")
@@ -164,6 +164,7 @@ export async function processQRScan(
       .single();
 
     const isGeoExempt = userProfile?.full_name?.toLowerCase().includes("тимур") ||
+                        userProfile?.full_name?.toLowerCase().includes("люба") ||
                         userProfile?.id === "23f4e009-d729-44d7-be93-a6a0cf3b4629" || 
                         userProfile?.full_name?.toLowerCase().includes("евдокия");
 
