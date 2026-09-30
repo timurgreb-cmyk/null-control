@@ -1,5 +1,5 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format } from "date-fns";
+import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format, addDays } from "date-fns";
 import { ru } from "date-fns/locale";
 import { formatLocalTime } from "@/utils/date";
 import ExportCsvButton from "./ExportCsvButton";
@@ -25,6 +25,7 @@ export default async function TimesheetPage({
 
   const startDate = startOfMonth(new Date(currentYear, currentMonth));
   const endDate = endOfMonth(startDate);
+  const searchEndLimit = addDays(endDate, 1);
 
   // 1. Получаем сотрудников
   const { data: employees } = await supabase
@@ -43,12 +44,12 @@ export default async function TimesheetPage({
     locationMap[loc.id] = loc.base_hours || 8; // По умолчанию 8 часов
   });
 
-  // 3. Получаем отметки за месяц
+  // 3. Получаем отметки за месяц (+ 1 день для ночных смен)
   const { data: records } = await supabase
     .from("time_records")
     .select("*")
     .gte("recorded_at", startDate.toISOString())
-    .lte("recorded_at", endDate.toISOString())
+    .lte("recorded_at", searchEndLimit.toISOString())
     .order("recorded_at", { ascending: true });
 
   // 3.5 Получаем решения по переработкам (свыше 3 часов)
@@ -64,104 +65,124 @@ export default async function TimesheetPage({
     let completedShifts = 0;
     let missingCheckouts = 0;
     let totalOvertimeHours = 0;
-
     let totalWorkedHours = 0;
 
-    // Группируем по дням
-    const days: Record<string, typeof empRecords> = {};
-    empRecords.forEach(r => {
-      const day = format(parseISO(r.recorded_at), 'yyyy-MM-dd');
-      if (!days[day]) days[day] = [];
-      days[day].push(r);
-    });
-
     const dailyDetails: any[] = [];
+    const usedRecordIds = new Set<string>();
 
-    Object.entries(days).forEach(([day, dayRecords]) => {
-      const dayCheckIns = dayRecords.filter(r => r.record_type === 'check_in');
-      const dayCheckOuts = dayRecords.filter(r => r.record_type === 'check_out');
+    for (let i = 0; i < empRecords.length; i++) {
+      const rec = empRecords[i];
+      if (usedRecordIds.has(rec.id)) continue;
 
-      const firstInRec = dayCheckIns.length > 0 ? dayCheckIns[0] : null;
-      const lastOutRec = dayCheckOuts.length > 0 ? dayCheckOuts[dayCheckOuts.length - 1] : null;
+      if (rec.record_type === 'check_in') {
+        usedRecordIds.add(rec.id);
+        const inTime = parseISO(rec.recorded_at);
+        const day = format(inTime, 'yyyy-MM-dd');
 
-      const firstIn = firstInRec?.recorded_at || null;
-      const lastOut = lastOutRec?.recorded_at || null;
+        // Проверяем, что смена началась именно в выбранном месяце
+        if (inTime < startDate || inTime > endDate) {
+          continue;
+        }
 
-      const formattedDay = format(parseISO(day), "d MMM (EEE)", { locale: ru });
-      const formattedFirstIn = firstIn ? formatLocalTime(firstIn) : "—";
-      const formattedLastOut = lastOut ? formatLocalTime(lastOut) : "—";
+        // Ищем следующий check_out в пределах 20 часов (поддержка ночных смен)
+        let nextOutRec: typeof rec | null = null;
+        for (let j = i + 1; j < empRecords.length; j++) {
+          const candidate = empRecords[j];
+          if (usedRecordIds.has(candidate.id)) continue;
 
-      if (firstIn && lastOut) {
-        const actualMins = differenceInMinutes(parseISO(lastOut), parseISO(firstIn));
-        const actualHours = actualMins / 60;
-        totalWorkedHours += actualHours;
+          const candidateTime = parseISO(candidate.recorded_at);
+          const diffHours = differenceInMinutes(candidateTime, inTime) / 60;
 
-        const locId = firstInRec?.location_id;
-        const baseHours = locId && locationMap[locId] ? locationMap[locId] : 8;
-
-        let calculatedOvertime = 0;
-        if (emp.is_overtime_enabled !== false) {
-          const rawOvertime = actualHours - (baseHours + 1);
-          if (rawOvertime > 0) {
-            calculatedOvertime = Math.floor(rawOvertime);
+          if (candidate.record_type === 'check_out' && diffHours >= 0 && diffHours <= 20) {
+            nextOutRec = candidate;
+            usedRecordIds.add(candidate.id);
+            break;
+          }
+          if (candidate.record_type === 'check_in') {
+            break;
           }
         }
 
-        let shiftMultiplier = 1.0;
-        let overtimeHours = 0;
-        let creditType: 'multiplier' | 'hours' = 'multiplier';
+        const firstIn = rec.recorded_at;
+        const lastOut = nextOutRec ? nextOutRec.recorded_at : null;
 
-        const existingApproval = approvalsData?.find(a => a.employee_id === emp.id && a.record_date === day);
-        if (existingApproval && existingApproval.status === 'approved') {
-          const val = existingApproval.approved_hours || 0;
-          if (val === 5) {
-            shiftMultiplier = 0.5;
-            creditType = 'multiplier';
-          } else if (val === 15) {
-            shiftMultiplier = 1.5;
-            creditType = 'multiplier';
-          } else if (val === 20) {
-            shiftMultiplier = 2.0;
-            creditType = 'multiplier';
-          } else if (val === 10 || val === 1) {
-            shiftMultiplier = 1.0;
-            creditType = 'multiplier';
-          } else if (val > 100) {
-            overtimeHours = val - 100;
-            creditType = 'hours';
-          } else {
-            overtimeHours = val;
-            creditType = 'hours';
+        const formattedDay = format(inTime, "d MMM (EEE)", { locale: ru });
+        const formattedFirstIn = formatLocalTime(firstIn);
+        const formattedLastOut = lastOut ? formatLocalTime(lastOut) : "—";
+
+        if (firstIn && lastOut) {
+          const actualMins = differenceInMinutes(parseISO(lastOut), parseISO(firstIn));
+          const actualHours = actualMins / 60;
+          totalWorkedHours += actualHours;
+
+          const locId = rec.location_id;
+          const baseHours = locId && locationMap[locId] ? locationMap[locId] : 8;
+
+          let calculatedOvertime = 0;
+          if (emp.is_overtime_enabled !== false) {
+            const rawOvertime = actualHours - (baseHours + 1);
+            if (rawOvertime > 0) {
+              calculatedOvertime = Math.floor(rawOvertime);
+            }
           }
-        }
 
-        completedShifts += shiftMultiplier;
-        totalOvertimeHours += overtimeHours;
+          let shiftMultiplier = 1.0;
+          let overtimeHours = 0;
+          let creditType: 'multiplier' | 'hours' = 'multiplier';
 
-        dailyDetails.push({ 
-          day, 
-          formattedDay, 
-          formattedFirstIn, 
-          formattedLastOut, 
-          firstIn, 
-          lastOut, 
-          actualHours,
-          calculatedOvertime,
-          shiftMultiplier,
-          overtimeHours,
-          creditType,
-          status: 'complete' 
-        });
-      } else if (firstIn && !lastOut) {
-        const isToday = day === new Date().toISOString().split('T')[0];
-        if (!isToday) {
-          missingCheckouts++;
-          dailyDetails.push({ day, formattedDay, formattedFirstIn, formattedLastOut, firstIn, lastOut: null, status: 'missing_checkout' });
+          const existingApproval = approvalsData?.find(a => a.employee_id === emp.id && a.record_date === day);
+          if (existingApproval && existingApproval.status === 'approved') {
+            const val = existingApproval.approved_hours || 0;
+            if (val === 5) {
+              shiftMultiplier = 0.5;
+              creditType = 'multiplier';
+            } else if (val === 15) {
+              shiftMultiplier = 1.5;
+              creditType = 'multiplier';
+            } else if (val === 20) {
+              shiftMultiplier = 2.0;
+              creditType = 'multiplier';
+            } else if (val === 10 || val === 1) {
+              shiftMultiplier = 1.0;
+              creditType = 'multiplier';
+            } else if (val > 100) {
+              overtimeHours = val - 100;
+              creditType = 'hours';
+            } else {
+              overtimeHours = val;
+              creditType = 'hours';
+            }
+          }
+
+          completedShifts += shiftMultiplier;
+          totalOvertimeHours += overtimeHours;
+
+          dailyDetails.push({ 
+            day, 
+            formattedDay, 
+            formattedFirstIn, 
+            formattedLastOut, 
+            firstIn, 
+            lastOut, 
+            actualHours,
+            calculatedOvertime,
+            shiftMultiplier,
+            overtimeHours,
+            creditType,
+            status: 'complete' 
+          });
         } else {
-          dailyDetails.push({ day, formattedDay, formattedFirstIn, formattedLastOut, firstIn, lastOut: null, status: 'in_progress' });
+          const nowDay = format(new Date(), 'yyyy-MM-dd');
+          const isToday = day === nowDay;
+          if (!isToday) {
+            missingCheckouts++;
+            dailyDetails.push({ day, formattedDay, formattedFirstIn, formattedLastOut, firstIn, lastOut: null, status: 'missing_checkout' });
+          } else {
+            dailyDetails.push({ day, formattedDay, formattedFirstIn, formattedLastOut: 'В процессе', firstIn, lastOut: null, status: 'in_progress' });
+          }
         }
       }
-    });
+    }
 
     const hourlyRate = (emp.shift_rate || 0) / 8;
     const basePay = completedShifts * (emp.shift_rate || 0);
@@ -171,52 +192,64 @@ export default async function TimesheetPage({
     return {
       ...emp,
       completedShifts,
-      totalWorkedHours,
-      overtimeHours: totalOvertimeHours,
-      totalEarned: totalEarned,
       missingCheckouts,
+      totalWorkedHours: Math.round(totalWorkedHours * 10) / 10,
+      totalOvertimeHours,
+      totalEarned,
       dailyDetails
     };
   }) || [];
 
-  const periodStr = format(startDate, "yyyy_MM");
-
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Табель</h1>
-        <div className="flex items-center space-x-3">
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 print:hidden">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Табель учета рабочего времени</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Агрегированные данные по сменам, ночным сменам и переработкам
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-3">
           <MonthSelector currentMonth={currentMonth} currentYear={currentYear} />
-          <ExportCsvButton data={timesheet} month={periodStr} />
+          <ExportCsvButton 
+            data={timesheet} 
+            month={format(startDate, "LLLL_yyyy", { locale: ru })} 
+          />
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ФИО</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Отработано дней</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Часы</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ставка за смену</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Переработки (ч)</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Незакрытые смены</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Итого к выплате</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {timesheet.map((row) => (
-              <TimesheetRow key={row.id} row={row} />
-            ))}
-            {timesheet.length === 0 && (
-              <tr suppressHydrationWarning>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                  Сотрудников пока нет
-                </td>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="py-3 px-4 w-8"></th>
+                <th className="py-3 px-4">Сотрудник</th>
+                <th className="py-3 px-4 text-center">Смен</th>
+                <th className="py-3 px-4 text-center">Отработано</th>
+                <th className="py-3 px-4 text-center">Переработки</th>
+                <th className="py-3 px-4 text-center">Пропуски</th>
+                <th className="py-3 px-4 text-right">Начислено</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {timesheet.map((emp) => (
+                <TimesheetRow 
+                  key={emp.id} 
+                  row={emp} 
+                />
+              ))}
+              {timesheet.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-gray-500">
+                    Нет данных за выбранный месяц
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

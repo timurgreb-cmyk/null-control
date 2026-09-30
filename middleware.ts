@@ -67,18 +67,19 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user) {
-    // Читаем роль из cookie, которую мы установили при логине
     const role = request.cookies.get("user_role")?.value;
 
     if (isLoginPage) {
       if (role === "admin") {
         return NextResponse.redirect(new URL("/admin", request.url));
-      } else {
+      } else if (role === "employee") {
         return NextResponse.redirect(new URL("/app/scan", request.url));
+      } else {
+        return NextResponse.redirect(new URL("/", request.url));
       }
     }
 
-    if (isAdminRoute && role !== "admin") {
+    if (isAdminRoute && role === "employee") {
       return NextResponse.redirect(new URL("/app/scan", request.url));
     }
   }

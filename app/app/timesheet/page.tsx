@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format, addMonths, subMonths } from "date-fns";
+import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format, addMonths, subMonths, addDays } from "date-fns";
 import { ru } from "date-fns/locale";
 import { CalendarDays, Clock, MapPin, ChevronLeft, ChevronRight, AlertTriangle, LogOut, UserCircle } from "lucide-react";
 import { formatLocalTime } from "@/utils/date";
@@ -39,6 +39,7 @@ export default async function EmployeeTimesheetPage({
   const selectedDate = new Date(currentYear, currentMonth, 1);
   const startDate = startOfMonth(selectedDate);
   const endDate = endOfMonth(selectedDate);
+  const fetchEndDate = addDays(endDate, 1);
 
   const prevDate = subMonths(selectedDate, 1);
   const nextDate = addMonths(selectedDate, 1);
@@ -63,13 +64,13 @@ export default async function EmployeeTimesheetPage({
     };
   });
 
-  // 3. Получаем отметки прихода/ухода за выбранный месяц
+  // 3. Получаем отметки прихода/ухода за выбранный месяц (с запасом +1 день на ночные смены)
   const { data: records } = await supabaseAdmin
     .from("time_records")
     .select("id, record_type, recorded_at, location_id, locations(name)")
     .eq("employee_id", user.id)
     .gte("recorded_at", startDate.toISOString())
-    .lte("recorded_at", endDate.toISOString())
+    .lte("recorded_at", fetchEndDate.toISOString())
     .order("recorded_at", { ascending: true });
 
   // 4. Получаем решение по переработкам
@@ -80,95 +81,116 @@ export default async function EmployeeTimesheetPage({
     .gte("record_date", format(startDate, 'yyyy-MM-dd'))
     .lte("record_date", format(endDate, 'yyyy-MM-dd'));
 
-  // Группируем отметки по дням
-  const daysMap: Record<string, typeof records> = {};
-  records?.forEach(r => {
-    const day = format(parseISO(r.recorded_at), 'yyyy-MM-dd');
-    if (!daysMap[day]) daysMap[day] = [];
-    daysMap[day]!.push(r);
-  });
-
   let completedShifts = 0;
   let totalWorkedHours = 0;
   let totalOvertimeHours = 0;
   let missingCheckouts = 0;
 
   const dailyShifts: any[] = [];
+  const usedRecordIds = new Set<string>();
+  const empRecords = records || [];
 
-  Object.entries(daysMap).forEach(([day, dayRecords]) => {
-    const safeRecords = dayRecords || [];
-    const checkIns = safeRecords.filter(r => r.record_type === 'check_in');
-    const checkOuts = safeRecords.filter(r => r.record_type === 'check_out');
+  for (let i = 0; i < empRecords.length; i++) {
+    const rec = empRecords[i];
+    if (usedRecordIds.has(rec.id)) continue;
 
-    const firstInRec = checkIns.length > 0 ? checkIns[0] : null;
-    const lastOutRec = checkOuts.length > 0 ? checkOuts[checkOuts.length - 1] : null;
+    if (rec.record_type === 'check_in') {
+      usedRecordIds.add(rec.id);
+      const inTime = parseISO(rec.recorded_at);
+      const day = format(inTime, 'yyyy-MM-dd');
 
-    const firstIn = firstInRec?.recorded_at || null;
-    const lastOut = lastOutRec?.recorded_at || null;
-
-    const formattedDay = format(parseISO(day), "d MMMM (EEE)", { locale: ru });
-    const formattedFirstIn = firstIn ? formatLocalTime(firstIn) : "—";
-    const formattedLastOut = lastOut ? formatLocalTime(lastOut) : "—";
-    const locationName = (firstInRec?.locations as any)?.name || "Пекарня";
-
-    if (firstIn && lastOut) {
-      const actualMins = differenceInMinutes(parseISO(lastOut), parseISO(firstIn));
-      const actualHours = actualMins / 60;
-      totalWorkedHours += actualHours;
-
-      let shiftMultiplier = 1.0;
-      let overtime = 0;
-      const existingApproval = approvalsData?.find(a => a.record_date === day);
-      if (existingApproval && existingApproval.status === 'approved') {
-        const val = existingApproval.approved_hours || 0;
-        if (val === 5) shiftMultiplier = 0.5;
-        else if (val === 15) shiftMultiplier = 1.5;
-        else if (val === 20) shiftMultiplier = 2.0;
-        else if (val === 10 || val === 1) shiftMultiplier = 1.0;
-        else if (val > 100) overtime = val - 100;
-        else overtime = val;
+      // Проверяем, что смена началась именно в выбранном месяце
+      if (inTime < startDate || inTime > endDate) {
+        continue;
       }
 
-      completedShifts += shiftMultiplier;
-      totalOvertimeHours += overtime;
+      // Ищем следующий check_out в пределах 20 часов (поддержка ночных смен)
+      let nextOutRec: typeof rec | null = null;
+      for (let j = i + 1; j < empRecords.length; j++) {
+        const candidate = empRecords[j];
+        if (usedRecordIds.has(candidate.id)) continue;
 
-      dailyShifts.push({
-        day,
-        formattedDay,
-        formattedFirstIn,
-        formattedLastOut,
-        locationName,
-        actualHours: actualHours.toFixed(1),
-        shiftMultiplier,
-        overtimeHours: overtime,
-        status: 'complete'
-      });
-    } else if (firstIn && !lastOut) {
-      const isToday = day === format(new Date(), 'yyyy-MM-dd');
-      if (!isToday) {
-        missingCheckouts++;
+        const candidateTime = parseISO(candidate.recorded_at);
+        const diffHours = differenceInMinutes(candidateTime, inTime) / 60;
+
+        if (candidate.record_type === 'check_out' && diffHours >= 0 && diffHours <= 20) {
+          nextOutRec = candidate;
+          usedRecordIds.add(candidate.id);
+          break;
+        }
+        if (candidate.record_type === 'check_in') {
+          break;
+        }
+      }
+
+      const firstIn = rec.recorded_at;
+      const lastOut = nextOutRec ? nextOutRec.recorded_at : null;
+
+      const formattedDay = format(inTime, "d MMMM (EEE)", { locale: ru });
+      const formattedFirstIn = formatLocalTime(firstIn);
+      const formattedLastOut = lastOut ? formatLocalTime(lastOut) : "—";
+      const locationName = (rec.locations as any)?.name || "Пекарня";
+
+      if (firstIn && lastOut) {
+        const actualMins = differenceInMinutes(parseISO(lastOut), parseISO(firstIn));
+        const actualHours = actualMins / 60;
+        totalWorkedHours += actualHours;
+
+        let shiftMultiplier = 1.0;
+        let overtime = 0;
+        const existingApproval = approvalsData?.find(a => a.record_date === day);
+        if (existingApproval && existingApproval.status === 'approved') {
+          const val = existingApproval.approved_hours || 0;
+          if (val === 5) shiftMultiplier = 0.5;
+          else if (val === 15) shiftMultiplier = 1.5;
+          else if (val === 20) shiftMultiplier = 2.0;
+          else if (val === 10 || val === 1) shiftMultiplier = 1.0;
+          else if (val > 100) overtime = val - 100;
+          else overtime = val;
+        }
+
+        completedShifts += shiftMultiplier;
+        totalOvertimeHours += overtime;
+
         dailyShifts.push({
           day,
           formattedDay,
           formattedFirstIn,
-          formattedLastOut: '—',
+          formattedLastOut,
           locationName,
-          actualHours: '—',
-          status: 'missing_checkout'
+          actualHours: actualHours.toFixed(1),
+          shiftMultiplier,
+          overtimeHours: overtime,
+          status: 'complete'
         });
-      } else {
-        dailyShifts.push({
-          day,
-          formattedDay,
-          formattedFirstIn,
-          formattedLastOut: 'В процессе',
-          locationName,
-          actualHours: '—',
-          status: 'in_progress'
-        });
+      } else if (firstIn && !lastOut) {
+        const isToday = day === format(new Date(), 'yyyy-MM-dd');
+        const diffHoursNow = differenceInMinutes(new Date(), inTime) / 60;
+        if (!isToday && diffHoursNow > 16) {
+          missingCheckouts++;
+          dailyShifts.push({
+            day,
+            formattedDay,
+            formattedFirstIn,
+            formattedLastOut: '—',
+            locationName,
+            actualHours: '—',
+            status: 'missing_checkout'
+          });
+        } else {
+          dailyShifts.push({
+            day,
+            formattedDay,
+            formattedFirstIn,
+            formattedLastOut: 'В процессе',
+            locationName,
+            actualHours: '—',
+            status: 'in_progress'
+          });
+        }
       }
     }
-  });
+  }
 
   // Сортируем смены от новых к старым
   dailyShifts.sort((a, b) => b.day.localeCompare(a.day));

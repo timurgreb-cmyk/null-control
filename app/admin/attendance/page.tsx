@@ -59,19 +59,20 @@ export default async function AttendancePage() {
     .order("full_name");
 
   // Подсветка незакрытых смен: 
-  // если это check_in, проверяем есть ли check_out в этот же день для этого сотрудника.
+  // если это check_in, проверяем есть ли check_out в пределах 20 часов для этого сотрудника.
   const recordsWithErrors = records?.map(record => {
     let isError = false;
     if (record.record_type === "check_in") {
-      const currentDay = record.recorded_at.split('T')[0];
-      const hasCheckout = records.some(r => 
-        r.employee_id === record.employee_id && 
-        r.record_type === "check_out" && 
-        r.recorded_at.startsWith(currentDay)
-      );
+      const inTime = parseISO(record.recorded_at);
+      const hasCheckout = records.some(r => {
+        if (r.employee_id !== record.employee_id || r.record_type !== "check_out") return false;
+        const outTime = parseISO(r.recorded_at);
+        const diffHours = (outTime.getTime() - inTime.getTime()) / (1000 * 60 * 60);
+        return diffHours >= 0 && diffHours <= 20;
+      });
       
-      const todayDay = new Date().toISOString().split('T')[0];
-      if (!hasCheckout && currentDay !== todayDay) {
+      const hoursSinceIn = (new Date().getTime() - inTime.getTime()) / (1000 * 60 * 60);
+      if (!hasCheckout && hoursSinceIn > 16) {
         isError = true;
       }
     }
