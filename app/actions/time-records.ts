@@ -156,17 +156,20 @@ export async function processQRScan(
     const locLng = location.longitude ? parseFloat(location.longitude) : null;
     const allowedRadius = location.radius_meters ? parseInt(location.radius_meters) : 200;
 
-    // Проверяем профиль сотрудника на освобождение от гео-контроля (Тимур, Люба, Евдокия)
+    // Проверяем профиль сотрудника на освобождение от гео-контроля (Тимур, Люба, Евдокия, Айдана)
     const { data: userProfile } = await supabaseAdmin
       .from("profiles")
       .select("full_name, id")
       .eq("id", user.id)
       .single();
 
-    const isGeoExempt = userProfile?.full_name?.toLowerCase().includes("тимур") ||
-                        userProfile?.full_name?.toLowerCase().includes("люба") ||
-                        userProfile?.id === "23f4e009-d729-44d7-be93-a6a0cf3b4629" || 
-                        userProfile?.full_name?.toLowerCase().includes("евдокия");
+    const nameLower = (userProfile?.full_name || "").toLowerCase();
+    const isGeoExempt = nameLower.includes("тимур") ||
+                        nameLower.includes("люба") ||
+                        nameLower.includes("евдокия") ||
+                        nameLower.includes("айдана") ||
+                        nameLower.includes("aidana") ||
+                        userProfile?.id === "23f4e009-d729-44d7-be93-a6a0cf3b4629";
 
     if (locLat !== null && locLng !== null && location.is_geo_required !== false && !isGeoExempt) {
       if (!userCoords || userCoords.lat === undefined || userCoords.lng === undefined) {

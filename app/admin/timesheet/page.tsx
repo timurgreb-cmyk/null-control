@@ -1,4 +1,6 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createClient as createSessionClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
 import { startOfMonth, endOfMonth, parseISO, differenceInMinutes, format, addDays } from "date-fns";
 import { ru } from "date-fns/locale";
 import { formatLocalTime } from "@/utils/date";
@@ -14,10 +16,34 @@ export default async function TimesheetPage({
 }: {
   searchParams: { month?: string; year?: string };
 }) {
+  const sessionClient = createSessionClient();
+  const { data: { user } } = await sessionClient.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  // Принудительный сброс всех старых сессий, созданных до сброса
+  const MIN_ADMIN_AUTH_TIME = new Date("2026-10-07T10:05:00Z").getTime();
+  const lastSignIn = user.last_sign_in_at ? new Date(user.last_sign_in_at).getTime() : 0;
+  if (lastSignIn < MIN_ADMIN_AUTH_TIME) {
+    redirect("/login");
+  }
+
   const supabase = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "admin") {
+    redirect("/app/scan");
+  }
   
   const now = new Date();
   const currentMonth = searchParams.month ? parseInt(searchParams.month) : now.getMonth();

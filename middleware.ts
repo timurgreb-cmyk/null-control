@@ -54,13 +54,18 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const isLoginPage = request.nextUrl.pathname.startsWith("/login");
   const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
   const isAppRoute = request.nextUrl.pathname.startsWith("/app");
+
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user || null;
+  } catch (err) {
+    console.error("Middleware auth error:", err);
+    user = null;
+  }
 
   if (!user && (isAdminRoute || isAppRoute)) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -79,7 +84,7 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    if (isAdminRoute && role === "employee") {
+    if (isAdminRoute && role !== "admin") {
       return NextResponse.redirect(new URL("/app/scan", request.url));
     }
   }

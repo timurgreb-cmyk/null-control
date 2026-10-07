@@ -4,6 +4,7 @@ import { Clock, Users, LayoutDashboard, MapPin, LogOut } from "lucide-react";
 import Link from "next/link";
 import { logout } from "@/app/actions/auth";
 import AdminMobileMenu from "@/components/AdminMobileMenu";
+import { redirect } from "next/navigation";
 
 export default async function AdminLayout({
   children,
@@ -15,20 +16,33 @@ export default async function AdminLayout({
     data: { user },
   } = await sessionClient.auth.getUser();
 
+  if (!user) {
+    redirect("/login");
+  }
+
+  // Принудительный сброс всех старых сессий, созданных до сброса
+  const MIN_ADMIN_AUTH_TIME = new Date("2026-10-07T10:05:00Z").getTime();
+  const lastSignIn = user.last_sign_in_at ? new Date(user.last_sign_in_at).getTime() : 0;
+  if (lastSignIn < MIN_ADMIN_AUTH_TIME) {
+    redirect("/login");
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  let adminName = "Администратор";
-  if (user) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .single();
-    if (data?.full_name) adminName = data.full_name;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "admin") {
+    redirect("/app/scan");
   }
+
+  const adminName = profile.full_name || "Администратор";
 
   const navItems = [
     { name: "Дашборд", href: "/admin", icon: LayoutDashboard },
