@@ -51,7 +51,7 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect("/"); // Middleware перенаправит на правильную страницу
+  redirect("/admin");
 }
 
 export async function logout() {
@@ -104,7 +104,7 @@ export async function loginWithPin(pin: string) {
   }
 
   revalidatePath("/", "layout");
-  redirect("/"); 
+  redirect("/app/scan"); 
 }
 
 export async function getCurrentProfile() {

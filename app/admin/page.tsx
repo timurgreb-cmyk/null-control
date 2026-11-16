@@ -12,9 +12,15 @@ export default async function AdminDashboard() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
   
-  // Получаем статистику на сегодня
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Получаем статистику на сегодня по времени Алматы (UTC+5)
+  const now = new Date();
+  const almatyDateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Almaty',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(now);
+  const todayStartAlmaty = new Date(`${almatyDateParts}T00:00:00+05:00`).toISOString();
 
   // Все активные сотрудники
   const { data: employees } = await supabase
@@ -32,7 +38,7 @@ export default async function AdminDashboard() {
       recorded_at,
       locations (name)
     `)
-    .gte("recorded_at", today.toISOString())
+    .gte("recorded_at", todayStartAlmaty)
     .order("recorded_at", { ascending: true });
 
   // Анализ присутствия

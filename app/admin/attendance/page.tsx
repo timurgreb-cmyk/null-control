@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { format, parseISO } from "date-fns";
-import { ru } from "date-fns/locale";
-import DeleteRecordButton from "./DeleteRecordButton";
+import { parseISO } from "date-fns";
+import AttendanceClient from "./AttendanceClient";
 import AddRecordModal from "./AddRecordModal";
 import LocalTime from "@/components/LocalTime";
 
@@ -13,7 +12,7 @@ export default async function AttendancePage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-  
+
   // Получаем отметки (последние 500)
   const { data: records } = await supabase
     .from("time_records")
@@ -23,11 +22,18 @@ export default async function AttendancePage() {
       record_type,
       employee_id,
       location_id,
+      notes,
       profiles (id, full_name),
       locations (name)
     `)
     .order("recorded_at", { ascending: false })
     .limit(500);
+
+  // Получаем локации
+  const { data: locations } = await supabase
+    .from("locations")
+    .select("id, name")
+    .order("name");
 
   // Получаем журнал ошибок сканирования (последние 50)
   let scanErrors: any[] = [];
@@ -58,7 +64,7 @@ export default async function AttendancePage() {
     .eq("role", "employee")
     .order("full_name");
 
-  // Подсветка незакрытых смен: 
+  // Подсветка незакрытых смен:
   // если это check_in, проверяем есть ли check_out в пределах 20 часов для этого сотрудника.
   const recordsWithErrors = records?.map(record => {
     let isError = false;
@@ -70,7 +76,7 @@ export default async function AttendancePage() {
         const diffHours = (outTime.getTime() - inTime.getTime()) / (1000 * 60 * 60);
         return diffHours >= 0 && diffHours <= 20;
       });
-      
+
       const hoursSinceIn = (new Date().getTime() - inTime.getTime()) / (1000 * 60 * 60);
       if (!hasCheckout && hoursSinceIn > 16) {
         isError = true;
@@ -79,120 +85,102 @@ export default async function AttendancePage() {
     return { ...record, isError };
   }) || [];
 
+  // Текущий день в Алматы (+05:00)
+  const todayAlmaty = new Date(Date.now() + 5 * 60 * 60 * 1000);
+  const todayDay = todayAlmaty.toISOString().split("T")[0];
+
   // Группировка по сотрудникам
-  const groupedByEmployee: Record<string, { employeeName: string, employeeId: string, records: any[] }> = {};
-  
+  const grouped: Record<string, { employeeId: string; employeeName: string; records: any[]; lastActivity: string; todayCount: number }> = {};
+
   recordsWithErrors.forEach(record => {
     const empId = record.employee_id;
-    if (!groupedByEmployee[empId]) {
-      groupedByEmployee[empId] = {
+    if (!grouped[empId]) {
+      grouped[empId] = {
         employeeId: empId,
         employeeName: (record.profiles as any)?.full_name || "Неизвестно",
-        records: []
+        records: [],
+        lastActivity: record.recorded_at,
+        todayCount: 0,
       };
     }
-    groupedByEmployee[empId].records.push(record);
+    grouped[empId].records.push(record);
+    const recAlmaty = new Date(new Date(record.recorded_at).getTime() + 5 * 60 * 60 * 1000);
+    if (recAlmaty.toISOString().split("T")[0] === todayDay) {
+      grouped[empId].todayCount++;
+    }
   });
 
-  const groupedArray = Object.values(groupedByEmployee).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+  const groupedArray = Object.values(grouped).sort((a, b) =>
+    a.employeeName.localeCompare(b.employeeName)
+  );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div>
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Журнал отметок</h1>
-          <AddRecordModal employees={employees || []} />
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Шапка */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Журнал отметок</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+            {recordsWithErrors.length} отметок • {groupedArray.length} сотрудников
+          </p>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {groupedArray.map(group => (
-            <div key={group.employeeId} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col max-h-[600px]">
-              <div className="bg-gray-50 px-5 py-4 border-b border-gray-100 flex justify-between items-center sticky top-0 z-10">
-                 <h3 className="font-bold text-gray-900 truncate pr-2">{group.employeeName}</h3>
-                 <span className="bg-primary/10 text-primary text-xs px-3 py-1 rounded-full font-bold whitespace-nowrap">
-                   {group.records.length} {group.records.length === 1 ? 'отметка' : 'отметок'}
-                 </span>
-              </div>
-              <div className="p-0 flex-1 overflow-y-auto custom-scrollbar">
-                <ul className="divide-y divide-gray-100">
-                  {group.records.map(record => (
-                    <li key={record.id} className={`p-5 flex flex-col hover:bg-gray-50 transition-colors ${record.isError ? "bg-red-50/30" : ""}`}>
-                       <div className="flex justify-between items-start mb-2.5">
-                         <span className={`px-2.5 py-1 text-[10px] uppercase font-black tracking-wider rounded-full ${
-                            record.record_type === "check_in" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                          }`}>
-                            {record.record_type === "check_in" ? "Приход" : "Уход"}
-                          </span>
-                          <div className="text-gray-900 font-bold">
-                            <LocalTime isoString={record.recorded_at} formatStr="dd MMM, HH:mm" />
-                          </div>
-                       </div>
-                       <div className="flex justify-between items-end mt-1">
-                         <div className="text-xs text-gray-500 font-medium">📍 {(record.locations as any)?.name || "Неизвестно"}</div>
-                         <DeleteRecordButton recordId={record.id} />
-                       </div>
-                       {record.isError && <div className="text-xs text-red-500 font-bold mt-3 bg-red-50 p-2 rounded-lg text-center border border-red-100">⚠️ Нет отметки об уходе</div>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          ))}
-          {groupedArray.length === 0 && (
-             <div className="col-span-full bg-white p-12 rounded-2xl text-center text-gray-500 border border-gray-200">
-               <p className="text-lg font-medium text-gray-900 mb-1">Отметок пока нет</p>
-               <p className="text-sm">Сотрудники еще не сканировали QR-код</p>
-             </div>
-          )}
+        <div className="flex flex-wrap items-center gap-3">
+          <AddRecordModal employees={employees || []} locations={locations || []} />
         </div>
       </div>
 
+      {/* Основной блок: список сотрудников с раскрытием */}
+      <AttendanceClient
+        groupedEmployees={groupedArray}
+        locations={locations || []}
+      />
+
       {/* Блок Журнала ошибок и гео-нарушений */}
       {scanErrors && scanErrors.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-red-200 dark:border-red-900/50 p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-red-100 text-red-600 rounded-xl flex items-center justify-center font-bold text-xl">
+            <div className="w-10 h-10 bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl flex items-center justify-center font-bold text-xl">
               🚨
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Журнал ошибок сканирования и гео-отклонений</h2>
-              <p className="text-xs text-gray-500">Попытки отметок вне территории цеха или с ошибками доступа</p>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Журнал ошибок сканирования и гео-отклонений</h2>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Попытки отметок вне территории цеха или с ошибками доступа</p>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700 text-sm">
+              <thead className="bg-gray-50 dark:bg-slate-800/60">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Сотрудник</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Время</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Причина ошибки</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Дистанция от объекта</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Локация</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Сотрудник</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Время</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Причина ошибки</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Дистанция от объекта</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Локация</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
                 {scanErrors.map((err) => (
-                  <tr key={err.id} className="hover:bg-red-50/20">
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                  <tr key={err.id} className="hover:bg-red-50/20 dark:hover:bg-red-950/20">
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
                       {(err.profiles as any)?.full_name || "Неизвестный юзер"}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-500 dark:text-slate-400 whitespace-nowrap">
                       <LocalTime isoString={err.created_at} formatStr="dd MMM, HH:mm:ss" />
                     </td>
-                    <td className="px-4 py-3 text-red-600 font-medium max-w-xs">
+                    <td className="px-4 py-3 text-red-600 dark:text-red-400 font-medium max-w-xs">
                       {err.error_message}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">
+                    <td className="px-4 py-3 font-semibold text-gray-700 dark:text-slate-300">
                       {err.distance_meters !== null && err.distance_meters !== undefined ? (
-                        err.distance_meters >= 1000 
-                          ? `📍 ${(err.distance_meters / 1000).toFixed(1)} км` 
+                        err.distance_meters >= 1000
+                          ? `📍 ${(err.distance_meters / 1000).toFixed(1)} км`
                           : `📍 ${err.distance_meters} м`
                       ) : (
-                        <span className="text-gray-400">--</span>
+                        <span className="text-gray-400 dark:text-slate-500">--</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">
                       {(err.locations as any)?.name || "Не указана"}
                     </td>
                   </tr>

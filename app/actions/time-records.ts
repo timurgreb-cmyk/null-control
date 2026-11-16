@@ -415,6 +415,12 @@ export async function createManualRecord(formData: FormData) {
     const employeeId = formData.get("employeeId") as string;
     const recordType = formData.get("recordType") as string;
     const datetime = formData.get("datetime") as string;
+    const locationId = (formData.get("locationId") as string) || null;
+    const reasonType = (formData.get("reasonType") as string) || "По объяснительной";
+    const reasonDetail = (formData.get("reasonDetail") as string) || "";
+
+    if (!employeeId) return { error: "Выберите сотрудника" };
+    if (!datetime) return { error: "Укажите дату и время" };
 
     // input type="datetime-local" отправляет время без часового пояса (например "2024-05-18T10:00").
     // Так как Vercel работает в UTC, он подумает, что это UTC. Принудительно добавляем зону Алматы (+05:00).
@@ -423,21 +429,112 @@ export async function createManualRecord(formData: FormData) {
       almatyDatetime += ":00+05:00";
     }
 
-    // Ищем дефолтную локацию или любую первую
-    const { data: location } = await supabaseAdmin.from("locations").select("id").limit(1).single();
+    let finalLocationId = locationId;
+    if (!finalLocationId) {
+      // Ищем дефолтную локацию или любую первую
+      const { data: location } = await supabaseAdmin.from("locations").select("id").limit(1).single();
+      finalLocationId = location?.id || null;
+    }
+
+    let noteText = "Добавлено вручную";
+    if (reasonDetail.trim()) {
+      noteText = `${reasonType}: ${reasonDetail.trim()}`;
+    } else if (reasonType) {
+      noteText = reasonType;
+    }
 
     const { error } = await supabaseAdmin.from("time_records").insert({
       employee_id: employeeId,
       record_type: recordType,
       recorded_at: new Date(almatyDatetime).toISOString(),
-      location_id: location?.id || null, // Если нет локаций
-      notes: "Добавлено вручную"
+      location_id: finalLocationId, // Если нет локаций
+      notes: noteText
     });
 
     if (error) return { error: error.message };
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/admin/attendance");
+    revalidatePath("/admin/timesheet");
+    revalidatePath("/app/timesheet");
     
     return { success: true };
   } catch (err: any) {
     return { error: err.message };
+  }
+}
+
+/**
+ * Редактирование отметки на основании объяснительной
+ */
+export async function updateTimeRecord(formData: FormData) {
+  try {
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    // Проверка прав (должен быть админ)
+    const { createClient: createSessionClient } = await import("@/utils/supabase/server");
+    const sessionClient = createSessionClient();
+    const { data: { user }, error: userError } = await sessionClient.auth.getUser();
+    if (!user) return { error: "Необходима авторизация: " + (userError?.message || "нет пользователя") };
+    
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("role, full_name")
+      .eq("id", user.id)
+      .single();
+    if (profileError || !profile) return { error: "Ошибка получения профиля" };
+    if (profile.role !== "admin") {
+      return { error: "Нет прав для редактирования отметок" };
+    }
+
+    const recordId = formData.get("recordId") as string;
+    const recordType = formData.get("recordType") as string;
+    const datetime = formData.get("datetime") as string;
+    const locationId = (formData.get("locationId") as string) || null;
+    const reasonType = (formData.get("reasonType") as string) || "По объяснительной";
+    const reasonDetail = (formData.get("reasonDetail") as string) || "";
+
+    if (!recordId) return { error: "ID отметки не передан" };
+    if (!datetime) return { error: "Укажите дату и время" };
+
+    let almatyDatetime = datetime;
+    if (almatyDatetime && almatyDatetime.length === 16) {
+      almatyDatetime += ":00+05:00";
+    }
+
+    let noteText = "Объяснительная";
+    if (reasonDetail.trim()) {
+      noteText = `${reasonType}: ${reasonDetail.trim()}`;
+    } else if (reasonType) {
+      noteText = reasonType;
+    }
+
+    const updatePayload: Record<string, any> = {
+      record_type: recordType,
+      recorded_at: new Date(almatyDatetime).toISOString(),
+      notes: noteText,
+    };
+    if (locationId) {
+      updatePayload.location_id = locationId;
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from("time_records")
+      .update(updatePayload)
+      .eq("id", recordId);
+
+    if (updateError) return { error: updateError.message };
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/admin/attendance");
+    revalidatePath("/admin/timesheet");
+    revalidatePath("/app/timesheet");
+
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || "Ошибка при обновлении отметки" };
   }
 }

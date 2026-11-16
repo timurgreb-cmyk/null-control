@@ -79,12 +79,10 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL("/admin", request.url));
       } else if (role === "employee") {
         return NextResponse.redirect(new URL("/app/scan", request.url));
-      } else {
-        return NextResponse.redirect(new URL("/", request.url));
       }
     }
 
-    if (isAdminRoute && role !== "admin") {
+    if (isAdminRoute && role === "employee") {
       return NextResponse.redirect(new URL("/app/scan", request.url));
     }
   }
