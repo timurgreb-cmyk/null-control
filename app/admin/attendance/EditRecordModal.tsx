@@ -82,7 +82,7 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
         onClick={handleOpen}
         type="button"
         title="Редактировать по объяснительной"
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 rounded-lg border border-amber-200/80 dark:border-amber-800/60 transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-200/80 transition-colors"
       >
         <Pencil className="w-3.5 h-3.5" />
         <span>Изменить</span>
@@ -90,7 +90,7 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
 
       {show && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-200 dark:border-slate-800">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-200 text-gray-900">
             {/* Header */}
             <div className="bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-4 text-white flex justify-between items-center">
               <div className="flex items-center space-x-2.5">
@@ -113,14 +113,14 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {error && (
-                <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs rounded-xl font-medium">
+                <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl font-medium">
                   {error}
                 </div>
               )}
 
               {/* Тип отметки */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Тип отметки
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -130,7 +130,7 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
                     className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
                       recordType === "check_in"
                         ? "bg-green-600 text-white border-green-600 shadow-sm"
-                        : "bg-gray-50 dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700 hover:bg-gray-100"
+                        : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
                     }`}
                   >
                     <span>Приход (Check-In)</span>
@@ -141,7 +141,7 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
                     className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
                       recordType === "check_out"
                         ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                        : "bg-gray-50 dark:bg-slate-800 text-gray-700 dark:text-slate-300 border-gray-200 dark:border-slate-700 hover:bg-gray-100"
+                        : "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100"
                     }`}
                   >
                     <span>Уход (Check-Out)</span>
@@ -151,7 +151,7 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
 
               {/* Дата и время */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Фактическое время по объяснительной *
                 </label>
                 <input
@@ -159,20 +159,20 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
                   required
                   value={datetime}
                   onChange={(e) => setDatetime(e.target.value)}
-                  className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
               {/* Локация */}
               {locations && locations.length > 0 && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                     Локация
                   </label>
                   <select
                     value={locationId}
                     onChange={(e) => setLocationId(e.target.value)}
-                    className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   >
                     {locations.map((loc) => (
                       <option key={loc.id} value={loc.id}>
@@ -185,7 +185,7 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
 
               {/* Причина / Основание */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Основание изменения
                 </label>
                 
@@ -201,7 +201,7 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
                       className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-colors border ${
                         reasonType === preset.value
                           ? "bg-amber-100 text-amber-900 border-amber-300 font-bold"
-                          : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 border-transparent hover:bg-gray-200"
+                          : "bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200"
                       }`}
                     >
                       {preset.label}
@@ -214,7 +214,7 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
                   value={reasonType}
                   onChange={(e) => setReasonType(e.target.value)}
                   placeholder="Тип основания (напр. Объяснительная)"
-                  className="w-full p-2 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg text-xs font-medium mb-2 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full p-2 bg-gray-50 border border-gray-300 rounded-lg text-xs font-medium text-gray-900 mb-2 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
 
                 <textarea
@@ -222,16 +222,16 @@ export default function EditRecordModal({ record, locations }: EditRecordModalPr
                   onChange={(e) => setReasonDetail(e.target.value)}
                   rows={2}
                   placeholder="Детали объяснительной (напр.: Объяснительная от 28.09, забыл пробить уход, ушел со смены в 23:30)"
-                  className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl text-xs font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-slate-800">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setShow(false)}
-                  className="px-4 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors"
                 >
                   Отмена
                 </button>

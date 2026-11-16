@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, Search, LogIn, LogOut, MapPin, Clock, Users } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, LogIn, LogOut, MapPin, Users } from "lucide-react";
 import DeleteRecordButton from "./DeleteRecordButton";
 import EditRecordModal from "./EditRecordModal";
 import LocalTime from "@/components/LocalTime";
@@ -94,24 +94,24 @@ export default function AttendanceClient({ groupedEmployees, locations }: Props)
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Поиск по имени сотрудника..."
-          className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary/30 focus:border-primary focus:outline-none transition-all"
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-primary/30 focus:border-primary focus:outline-none transition-all"
         />
       </div>
 
       {/* Список сотрудников */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         {filtered.length === 0 ? (
           <div className="p-12 text-center">
-            <Users className="w-8 h-8 text-gray-300 dark:text-slate-600 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+            <Users className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-gray-900">
               {search ? "Сотрудник не найден" : "Отметок пока нет"}
             </p>
-            <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+            <p className="text-xs text-gray-500 mt-1">
               {search ? "Попробуйте изменить запрос" : "Сотрудники еще не сканировали QR-код"}
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-gray-100 dark:divide-slate-800">
+          <ul className="divide-y divide-gray-100">
             {filtered.map(emp => {
               const isExpanded = expandedEmployee === emp.employeeId;
               const dateGroups = isExpanded ? groupByDate(emp.records) : {};
@@ -122,26 +122,26 @@ export default function AttendanceClient({ groupedEmployees, locations }: Props)
                   {/* Строка сотрудника */}
                   <button
                     onClick={() => toggleEmployee(emp.employeeId)}
-                    className={`w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors ${
-                      isExpanded ? "bg-gray-50 dark:bg-slate-800/40" : ""
+                    className={`w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors ${
+                      isExpanded ? "bg-gray-50" : ""
                     }`}
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
                         isExpanded
                           ? "bg-primary text-white"
-                          : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300"
+                          : "bg-gray-100 text-gray-600"
                       }`}>
                         {emp.employeeName.charAt(0)}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 dark:text-white text-sm truncate">
+                        <p className="font-semibold text-gray-900 text-sm truncate">
                           {emp.employeeName}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                        <p className="text-xs text-gray-500 mt-0.5">
                           {emp.records.length} {emp.records.length === 1 ? "отметка" : emp.records.length < 5 ? "отметки" : "отметок"}
                           {emp.todayCount > 0 && (
-                            <span className="text-green-600 dark:text-green-400 font-semibold ml-1.5">
+                            <span className="text-green-600 font-semibold ml-1.5">
                               • сегодня {emp.todayCount}
                             </span>
                           )}
@@ -163,23 +163,23 @@ export default function AttendanceClient({ groupedEmployees, locations }: Props)
 
                   {/* Развёрнутые записи по дням */}
                   {isExpanded && (
-                    <div className="border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-950/30">
+                    <div className="border-t border-gray-100 bg-gray-50/50">
                       {sortedDates.map(dateKey => (
                         <div key={dateKey}>
                           {/* Заголовок дня */}
-                          <div className="px-5 py-2.5 bg-gray-100/80 dark:bg-slate-800/60 border-b border-gray-200/60 dark:border-slate-700/50">
-                            <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider">
+                          <div className="px-5 py-2.5 bg-gray-100/80 border-b border-gray-200/60">
+                            <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
                               {formatDateLabel(dateKey)}
                             </span>
                           </div>
 
                           {/* Записи за день */}
-                          <ul className="divide-y divide-gray-100/80 dark:divide-slate-800/60">
+                          <ul className="divide-y divide-gray-100/80">
                             {dateGroups[dateKey].map(record => (
                               <li
                                 key={record.id}
                                 className={`px-5 py-3.5 flex flex-col transition-colors ${
-                                  record.isError ? "bg-red-50/40 dark:bg-red-950/10" : "hover:bg-white dark:hover:bg-slate-900/40"
+                                  record.isError ? "bg-red-50/40" : "hover:bg-white"
                                 }`}
                               >
                                 <div className="flex items-center justify-between">
@@ -187,8 +187,8 @@ export default function AttendanceClient({ groupedEmployees, locations }: Props)
                                   <div className="flex items-center gap-3 min-w-0">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
                                       record.record_type === "check_in"
-                                        ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                                        : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                                        ? "bg-green-100 text-green-600"
+                                        : "bg-blue-100 text-blue-600"
                                     }`}>
                                       {record.record_type === "check_in" ? (
                                         <LogIn className="w-4 h-4" />
@@ -198,18 +198,18 @@ export default function AttendanceClient({ groupedEmployees, locations }: Props)
                                     </div>
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2">
-                                        <span className="font-bold text-sm text-gray-900 dark:text-white">
+                                        <span className="font-bold text-sm text-gray-900">
                                           <LocalTime isoString={record.recorded_at} formatStr="HH:mm" />
                                         </span>
                                         <span className={`text-[10px] font-bold uppercase tracking-wider ${
                                           record.record_type === "check_in"
-                                            ? "text-green-600 dark:text-green-400"
-                                            : "text-blue-600 dark:text-blue-400"
+                                            ? "text-green-600"
+                                            : "text-blue-600"
                                         }`}>
                                           {record.record_type === "check_in" ? "Приход" : "Уход"}
                                         </span>
                                       </div>
-                                      <p className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                                         <MapPin className="w-3 h-3 shrink-0" />
                                         <span className="truncate">{(record.locations as any)?.name || "Неизвестно"}</span>
                                       </p>
@@ -237,10 +237,10 @@ export default function AttendanceClient({ groupedEmployees, locations }: Props)
 
                                 {/* Бейдж объяснительной */}
                                 {record.notes && (
-                                  <div className="mt-2 ml-11 p-2 bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 rounded-lg text-xs text-amber-900 dark:text-amber-200 flex items-start gap-1.5">
+                                  <div className="mt-2 ml-11 p-2 bg-amber-50/90 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-1.5">
                                     <span className="text-sm leading-none">📝</span>
                                     <div className="flex-1 min-w-0">
-                                      <span className="font-bold text-amber-950 dark:text-amber-100">Основание: </span>
+                                      <span className="font-bold text-amber-950">Основание: </span>
                                       <span className="break-words">{record.notes}</span>
                                     </div>
                                   </div>
@@ -248,7 +248,7 @@ export default function AttendanceClient({ groupedEmployees, locations }: Props)
 
                                 {/* Ошибка незакрытой смены */}
                                 {record.isError && (
-                                  <div className="mt-2 ml-11 text-xs text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-950/30 p-2 rounded-lg border border-red-100 dark:border-red-900/50 flex items-center gap-1.5">
+                                  <div className="mt-2 ml-11 text-xs text-red-600 font-bold bg-red-50 p-2 rounded-lg border border-red-100 flex items-center gap-1.5">
                                     <span>⚠️</span> Нет отметки об уходе
                                   </div>
                                 )}

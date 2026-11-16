@@ -57,16 +57,16 @@ export default function AddRecordModal({ employees, locations = [] }: AddRecordM
 
       {show && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6 border border-gray-200 dark:border-slate-800">
-            <h2 className="text-xl font-bold mb-1 text-gray-900 dark:text-white">Добавить отметку</h2>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-gray-200 text-gray-900">
+            <h2 className="text-xl font-bold mb-1 text-gray-900">Добавить отметку</h2>
             <p className="text-xs text-gray-500 mb-4">Внесение отметки по объяснительной или служебной записке</p>
             
-            {error && <div className="mb-4 text-red-500 text-xs bg-red-50 dark:bg-red-950/40 border border-red-200 p-3 rounded-xl font-medium">{error}</div>}
+            {error && <div className="mb-4 text-red-500 text-xs bg-red-50 border border-red-200 p-3 rounded-xl font-medium">{error}</div>}
             
             <form onSubmit={handleSubmit} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1">Сотрудник *</label>
-                <select name="employeeId" required className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Сотрудник *</label>
+                <select name="employeeId" required className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-primary focus:outline-none">
                   <option value="">Выберите сотрудника</option>
                   {employees.map(emp => (
                     <option key={emp.id} value={emp.id}>{emp.full_name}</option>
@@ -75,22 +75,22 @@ export default function AddRecordModal({ employees, locations = [] }: AddRecordM
               </div>
               
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1">Событие *</label>
-                <select name="recordType" required className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Событие *</label>
+                <select name="recordType" required className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-primary focus:outline-none">
                   <option value="check_in">Приход (Check-In)</option>
                   <option value="check_out">Уход (Check-Out)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1">Дата и Время *</label>
-                <input type="datetime-local" name="datetime" required className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none" />
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Дата и Время *</label>
+                <input type="datetime-local" name="datetime" required className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-primary focus:outline-none" />
               </div>
 
               {locations.length > 0 && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1">Локация</label>
-                  <select name="locationId" className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary focus:outline-none">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Локация</label>
+                  <select name="locationId" className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:ring-2 focus:ring-primary focus:outline-none">
                     {locations.map(loc => (
                       <option key={loc.id} value={loc.id}>{loc.name}</option>
                     ))}
@@ -100,7 +100,7 @@ export default function AddRecordModal({ employees, locations = [] }: AddRecordM
 
               {/* Основание */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider mb-1">Основание / Объяснительная</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Основание / Объяснительная</label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {REASON_PRESETS.map((preset) => (
                     <button
@@ -110,7 +110,7 @@ export default function AddRecordModal({ employees, locations = [] }: AddRecordM
                       className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-colors border ${
                         reasonType === preset.value
                           ? "bg-amber-100 text-amber-900 border-amber-300 font-bold"
-                          : "bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400 border-transparent hover:bg-gray-200"
+                          : "bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200"
                       }`}
                     >
                       {preset.label}
@@ -122,15 +122,15 @@ export default function AddRecordModal({ employees, locations = [] }: AddRecordM
                   value={reasonDetail}
                   onChange={(e) => setReasonDetail(e.target.value)}
                   placeholder="Детали объяснительной (напр.: Забыл отметиться, пришел в 09:00)"
-                  className="w-full p-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl text-xs font-medium focus:ring-2 focus:ring-primary focus:outline-none"
+                  className="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-900 focus:ring-2 focus:ring-primary focus:outline-none"
                 />
               </div>
               
-              <div className="flex justify-end pt-3 space-x-2.5 border-t border-gray-100 dark:border-slate-800">
+              <div className="flex justify-end pt-3 space-x-2.5 border-t border-gray-100">
                 <button 
                   type="button" 
                   onClick={() => setShow(false)}
-                  className="px-4 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors"
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors"
                 >
                   Отмена
                 </button>

@@ -119,8 +119,8 @@ export default async function AttendancePage() {
       {/* Шапка */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Журнал отметок</h1>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Журнал отметок</h1>
+          <p className="text-sm text-gray-500 mt-1">
             {recordsWithErrors.length} отметок • {groupedArray.length} сотрудников
           </p>
         </div>
@@ -137,50 +137,50 @@ export default async function AttendancePage() {
 
       {/* Блок Журнала ошибок и гео-нарушений */}
       {scanErrors && scanErrors.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-red-200 dark:border-red-900/50 p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl flex items-center justify-center font-bold text-xl">
+            <div className="w-10 h-10 bg-red-100 text-red-600 rounded-xl flex items-center justify-center font-bold text-xl">
               🚨
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Журнал ошибок сканирования и гео-отклонений</h2>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Попытки отметок вне территории цеха или с ошибками доступа</p>
+              <h2 className="text-lg font-bold text-gray-900">Журнал ошибок сканирования и гео-отклонений</h2>
+              <p className="text-xs text-gray-500">Попытки отметок вне территории цеха или с ошибками доступа</p>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700 text-sm">
-              <thead className="bg-gray-50 dark:bg-slate-800/60">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Сотрудник</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Время</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Причина ошибки</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Дистанция от объекта</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 dark:text-slate-300">Локация</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Сотрудник</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Время</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Причина ошибки</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Дистанция от объекта</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Локация</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-gray-100">
                 {scanErrors.map((err) => (
-                  <tr key={err.id} className="hover:bg-red-50/20 dark:hover:bg-red-950/20">
-                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                  <tr key={err.id} className="hover:bg-red-50/20">
+                    <td className="px-4 py-3 font-medium text-gray-900">
                       {(err.profiles as any)?.full_name || "Неизвестный юзер"}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                       <LocalTime isoString={err.created_at} formatStr="dd MMM, HH:mm:ss" />
                     </td>
-                    <td className="px-4 py-3 text-red-600 dark:text-red-400 font-medium max-w-xs">
+                    <td className="px-4 py-3 text-red-600 font-medium max-w-xs">
                       {err.error_message}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-700 dark:text-slate-300">
+                    <td className="px-4 py-3 font-semibold text-gray-700">
                       {err.distance_meters !== null && err.distance_meters !== undefined ? (
                         err.distance_meters >= 1000
                           ? `📍 ${(err.distance_meters / 1000).toFixed(1)} км`
                           : `📍 ${err.distance_meters} м`
                       ) : (
-                        <span className="text-gray-400 dark:text-slate-500">--</span>
+                        <span className="text-gray-400">--</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">
+                    <td className="px-4 py-3 text-gray-600">
                       {(err.locations as any)?.name || "Не указана"}
                     </td>
                   </tr>
